@@ -1,3 +1,7 @@
+mod spatialdisc;
+mod solver;
+mod mesh;
 fn main() {
-    println!("Hello, world!");
+    let mut solver = solver::Solver::default();
+    let mut mesh = mesh::Mesh::default();
 }
