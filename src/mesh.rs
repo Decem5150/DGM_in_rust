@@ -1,4 +1,4 @@
-use crate::solver;
+use crate::solver::{self, ConsVar};
 use crate::spatialdisc::gauss_point::Quadrature2D;
 use crate::spatialdisc::basis_function::DubinerBasis;
 
@@ -14,7 +14,7 @@ pub struct Element<'a> {
     pub vertices: Vec<&'a Vertex>,
     pub edges: Vec<&'a Edge<'a>>,
     pub neighbours: Vec<&'a Element<'a>>,
-    pub solution: Vec<solver::ConsVar>,
+    pub solution: Vec<ConsVar>,
     pub jacob_det: f64,
     pub mass_mat_diag: Vec<f64>,
     pub dphi_dx: Vec<Vec<f64>>,
@@ -50,7 +50,8 @@ pub struct Vertex {
 pub struct Edge<'a> {
     pub vertices: Vec<&'a Vertex>,
     pub elements: Vec<&'a Element<'a>>,
-    pub flux: Vec<Flux>,
+    pub invis_flux: Vec<ConsVar>,
+    //pub vis_flux: Vec<ConsVar>,
     pub jacob_det: f64,
     pub normal: [f64; 2],
 }
@@ -74,10 +75,10 @@ impl<'a> Edge<'a> {
 #[derive(Default)]
 pub struct Patch<'a> {
     pub edges: Vec<&'a Edge<'a>>,
-    pub bc: fn(edges: &mut Vec<&'a Edge>),
+    pub bc: Box<dyn BoundaryCondition>,
 }
-impl Patch {
+impl<'a> Patch<'a> {
     pub fn apply_bc(&mut self) {
-        (self.bc)(&mut self.edges);
+        bc.apply();
     }
 }
