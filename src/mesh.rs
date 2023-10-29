@@ -48,12 +48,14 @@ pub struct Vertex {
 }
 #[derive(Default)]
 pub struct Edge<'a> {
-    pub vertices: Vec<&'a Vertex>,
-    pub elements: Vec<&'a Element<'a>>,
+    pub vertices: [&'a Vertex; 2],
+    pub elements: [&'a Element<'a>; 2],
     pub invis_flux: Vec<ConsVar>,
     //pub vis_flux: Vec<ConsVar>,
     pub jacob_det: f64,
     pub normal: [f64; 2],
+    pub index_in_left: usize,
+    pub index_in_right: usize,
 }
 impl<'a> Edge<'a> {
     pub fn compute_jacob_det(&mut self) {
