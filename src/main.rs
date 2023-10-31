@@ -1,4 +1,5 @@
-mod spatialdisc;
+mod spatial_disc;
+mod temporal_disc;
 mod solver;
 mod mesh;
 fn main() {

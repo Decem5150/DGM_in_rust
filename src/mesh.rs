@@ -1,6 +1,6 @@
 use crate::solver::{self, ConsVar};
-use crate::spatialdisc::gauss_point::Quadrature2D;
-use crate::spatialdisc::basis_function::DubinerBasis;
+use crate::spatial_disc::gauss_point::GaussPoints;
+use crate::spatial_disc::basis_function::DubinerBasis;
 
 #[derive(Default)]
 pub struct Mesh<'a> { 
@@ -30,13 +30,13 @@ impl<'a> Element<'a> {
         let y3 = self.vertices[2].y;
         self.jacob_det = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
     }
-    pub fn compute_mass_mat(&mut self, quad: &Quadrature2D, basis: &DubinerBasis) {
+    pub fn compute_mass_mat(&mut self, quad: &GaussPoints, basis: &DubinerBasis) {
         for value in self.mass_mat_diag.iter_mut() {
             *value = 0.0;
         }
         for i in 0..basis.dof {
             for j in 0..quad.points.len() {
-                self.mass_mat_diag[i] += quad.weights[j] * basis.phi_gauss[j][i] * basis.phi_gauss[j][j] * self.jacob_det;
+                self.mass_mat_diag[i] += quad.cell_weights[j] * basis.phi_gauss[j][i] * basis.phi_gauss[j][j] * self.jacob_det;
             }
         }
     }
@@ -81,6 +81,6 @@ pub struct Patch<'a> {
 }
 impl<'a> Patch<'a> {
     pub fn apply_bc(&mut self) {
-        bc.apply();
+        self.bc.apply();
     }
 }

@@ -4,15 +4,12 @@ pub mod gauss_point;
 pub mod basis_function;
 pub use crate::mesh::Element;
 pub use crate::mesh::Mesh;
-pub struct SpatialDisc{
-    pub cell_gauss_points: Vec<[f64; 2]>,
-    pub cell_gauss_weights: Vec<f64>,
-    pub edge_gauss_points: Vec<f64>,
-    pub edge_gauss_weights: Vec<f64>,
-    pub compute_inviscid_flux: Box<dyn flux::InvisFluxScheme>,
-    // pub compute_viscous_flux: Box<dyn flux::VisFluxScheme>,
+pub struct SpatialDisc<'a> {
+    pub gauss_point: gauss_point::GaussPoints,
+    pub inviscid_flux: Box<dyn flux::InvisFluxScheme<'a>>,
+    // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
 }
-impl<'a> SpatialDisc {
+impl<'a> SpatialDisc<'a> {
     pub fn integrate_over_cell(&self, element: &'a Element) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     }
     pub fn compute_fluxes(&self, mesh: &Mesh) {
@@ -21,9 +18,7 @@ impl<'a> SpatialDisc {
             let right_element = edge.elements[1];
             let left_value = left_element.solution;
             let right_value = right_element.solution;
-            let nx = edge.normal[0];
-            let ny = edge.normal[1];
-            self.compute_inviscid_flux.compute(left_value, right_value, edge.invis_flux, nx, ny);
+            self.inviscid_flux.compute(left_value, right_value, edge.invis_flux, edge.normal);
         }
     }
 }

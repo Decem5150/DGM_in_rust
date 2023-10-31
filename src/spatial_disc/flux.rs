@@ -1,12 +1,12 @@
 use crate::solver::ConsVar;
-use crate::mesh;
 pub trait InvisFluxScheme<'a> {
-    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, nx: f64, ny: f64);
+    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64);
 }
 pub struct HLLC;
 impl<'a> InvisFluxScheme<'a> for HLLC {
-    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, nx: f64, ny: f64) {
-        let hcr: f64 = 1.4;
+    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64) {
+        let nx = normal[0];
+        let ny = normal[1];
         let q1l = left_value.density;
         let q2l = left_value.x_momentum;
         let q3l = left_value.y_momentum;
@@ -64,33 +64,9 @@ impl<'a> InvisFluxScheme<'a> for HLLC {
                 return;
             }
         } 
-        for patch in mesh.patches.iter() {
-            for edge in patch.edges.iter() {
-                let left_element = edge.elements[0];
-                let right_element = edge.elements[1];
-                let left_value = left_element.solution[edge.flux[0].index];
-                let right_value = right_element.solution[edge.flux[1].index];
-                let nx = edge.normal[0];
-                let ny = edge.normal[1];
-                let mut flux = solver::ConsVar::default();
-                hllc_flux(left_value, right_value, &mut flux, nx, ny);
-                residuals[left_element.index][edge.flux[0].index] += solver::ConsVar {
-                    density: -flux.density_flux * edge.jacob_det,
-                    x_momentum: -flux.x_momentum_flux * edge.jacob_det,
-                    y_momentum: -flux.y_momentum_flux * edge.jacob_det,
-                    energy: -flux.energy_flux * edge.jacob_det,
-                };
-                residuals[right_element.index][edge.flux[1].index] += solver::ConsVar {
-                    density: flux.density_flux * edge.jacob_det,
-                    x_momentum: flux.x_momentum_flux * edge.jacob_det,
-                    y_momentum: flux.y_momentum_flux * edge.jacob_det,
-                    energy: flux.energy_flux * edge.jacob_det,
-                };
-            }
-        }
     }
 }
-pub fn flux(q1: f64, q2: f64, q3: f64, q4: f64) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
+pub fn flux(q1: f64, q2: f64, q3: f64, q4: f64, hcr: f64) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
     let hcr: f64 = 1.4;
     let u = q2 / q1;
     let v = q3 / q1;
@@ -105,7 +81,9 @@ pub fn flux(q1: f64, q2: f64, q3: f64, q4: f64) -> (f64, f64, f64, f64, f64, f64
     let g4 = v * (q4 + p);
     (f1, f2, f3, f4, g1, g2, g3, g4)
 }
-pub fn hllc_flux<'a>(left_value: Field, right_value: Field, flux: &'a mut InvisFlux, nx: f64, ny: f64) {
+pub fn hllc_flux<'a>(left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, normal: [f64; 2]) {
+    let nx = normal[0];
+    let ny = normal[1];
     let hcr: f64 = 1.4;
     let q1l = left_value.density;
     let q2l = left_value.x_momentum;
