@@ -1,6 +1,7 @@
-use crate::solver::{self, ConsVar};
+use crate::solver::ConsVar;
 use crate::spatial_disc::gauss_point::GaussPoints;
 use crate::spatial_disc::basis_function::DubinerBasis;
+use crate::spatial_disc::boundary::BoundaryCondition;
 
 #[derive(Default)]
 pub struct Mesh<'a> { 
@@ -14,7 +15,7 @@ pub struct Element<'a> {
     pub vertices: Vec<&'a Vertex>,
     pub edges: Vec<&'a Edge<'a>>,
     pub neighbours: Vec<&'a Element<'a>>,
-    pub solution: Vec<ConsVar>,
+    pub solution: ConsVar,
     pub jacob_det: f64,
     pub mass_mat_diag: Vec<f64>,
     pub dphi_dx: Vec<Vec<f64>>,

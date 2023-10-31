@@ -2,6 +2,7 @@ pub mod flux;
 pub mod quadrature;
 pub mod gauss_point;
 pub mod basis_function;
+pub mod boundary;
 pub use crate::mesh::Element;
 pub use crate::mesh::Mesh;
 pub struct SpatialDisc<'a> {

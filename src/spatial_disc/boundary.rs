@@ -1,10 +1,10 @@
 use crate::solver::ConsVar;
 use crate::mesh::Element;
-pub trait BoundaryCondition {
-    fn apply(&self, left_value: ConsVar, right_value: ConsVar, flux: &mut ConsVar, nx: f64, ny: f64);
+pub trait BoundaryCondition<'a> {
+    fn apply(&self, left_element: &'a mut Element, right_element: &'a mut Element, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64);
 }
 struct NoSlipWall;
-impl BoundaryCondition for NoSlipWall {
+impl<'a> BoundaryCondition<'a> for NoSlipWall {
     fn apply(&self, left_element: &'a mut Element, right_element: &'a mut Element, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64) {
         right_element.solution.density = left_element.solution.density;
         right_element.solution.x_momentum = - left_element.solution.x_momentum;
