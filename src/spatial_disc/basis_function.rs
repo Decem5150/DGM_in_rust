@@ -1,7 +1,7 @@
 pub struct DubinerBasis {
     pub dof: usize,
-    pub phi_gauss: Vec<Vec<f64>>,
-    pub phi_edge: Vec<Vec<f64>>,
+    pub phi_cell_gp: Vec<Vec<f64>>,
+    pub phi_edge_gp: Vec<Vec<f64>>,
     pub dphi_dxi: Vec<Vec<f64>>,
     pub dphi_deta: Vec<Vec<f64>>,
     pub mass_mat: Vec<f64>,
@@ -11,20 +11,20 @@ impl DubinerBasis {
         for i in 0..gp_number {
             let xi = gauss_points[i][0];
             let eta = gauss_points[i][1];
-            self.phi_gauss[i][0] = 1.0;
-            self.phi_gauss[i][1] = xi;
-            self.phi_gauss[i][2] = eta;
-            self.phi_gauss[i][3] = xi * (2.0 * xi - 1.0);
-            self.phi_gauss[i][4] = 4.0 * xi * eta;
-            self.phi_gauss[i][5] = eta * (2.0 * eta - 1.0);
+            self.phi_cell_gp[i][0] = 1.0;
+            self.phi_cell_gp[i][1] = xi;
+            self.phi_cell_gp[i][2] = eta;
+            self.phi_cell_gp[i][3] = xi * (2.0 * xi - 1.0);
+            self.phi_cell_gp[i][4] = 4.0 * xi * eta;
+            self.phi_cell_gp[i][5] = eta * (2.0 * eta - 1.0);
         }
     }
     fn compute_phi_edge(&mut self, edge_gauss_points: Vec<f64>, gp_number: usize) {
         for i in 0..gp_number {
             let x = edge_gauss_points[i];
-            self.phi_edge[i][0] = 1.0;
-            self.phi_edge[i][1] = x;
-            self.phi_edge[i][2] = 0.5 * (3.0 * x.powi(2) - 1.0);
+            self.phi_edge_gp[i][0] = 1.0;
+            self.phi_edge_gp[i][1] = x;
+            self.phi_edge_gp[i][2] = 0.5 * (3.0 * x.powi(2) - 1.0);
         }
     }
     fn compute_derivatives(&mut self, gauss_points: Vec<[f64; 2]>, gp_number: usize) {

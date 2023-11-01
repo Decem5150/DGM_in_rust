@@ -15,7 +15,8 @@ pub struct Element<'a> {
     pub vertices: Vec<&'a Vertex>,
     pub edges: Vec<&'a Edge<'a>>,
     pub neighbours: Vec<&'a Element<'a>>,
-    pub solution: ConsVar,
+    pub solution: Vec<ConsVar>,
+    pub residual: Vec<ConsVar>,
     pub jacob_det: f64,
     pub mass_mat_diag: Vec<f64>,
     pub dphi_dx: Vec<Vec<f64>>,
@@ -36,7 +37,7 @@ impl<'a> Element<'a> {
             *value = 0.0;
         }
         for i in 0..basis.dof {
-            for j in 0..quad.points.len() {
+            for j in 0..quad.cell_points.len() {
                 self.mass_mat_diag[i] += quad.cell_weights[j] * basis.phi_gauss[j][i] * basis.phi_gauss[j][j] * self.jacob_det;
             }
         }
@@ -47,7 +48,6 @@ pub struct Vertex {
     pub x: f64,
     pub y: f64,
 }
-#[derive(Default)]
 pub struct Edge<'a> {
     pub vertices: [&'a Vertex; 2],
     pub elements: [&'a Element<'a>; 2],

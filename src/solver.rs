@@ -11,15 +11,17 @@ pub struct ConsVar {
 pub struct SolverParameters {
     pub cfl: f64,
     pub final_time: f64,
-    pub number_of_time_steps: i64,
-    pub number_of_gauss_points: i64,
-    pub number_of_elements: i64,
-    pub number_of_basis_functions: i64,
-    pub number_of_edges: i64,
-    pub number_of_vertices: i64,
-    pub number_of_patches: i64,
+    pub number_of_time_steps: usize,
+    pub number_of_cell_gp: usize,
+    pub number_of_edge_gp: usize,
+    pub number_of_equations: usize,
+    pub number_of_basis_functions: usize,
+    pub number_of_elements: usize,
+    pub number_of_edges: usize,
+    pub number_of_vertices: usize,
+    pub number_of_patches: usize,
 }
-struct FlowParameters {
+pub struct FlowParameters {
     pub hcr: f64,
     pub gas_constant: f64,
     pub viscosity: f64,
@@ -27,7 +29,6 @@ struct FlowParameters {
 }
 pub struct Solver<'a> {
     pub mesh: mesh::Mesh<'a>,
-    pub residuals: Vec<Vec<ConsVar>>,
     pub spatial_disc: spatial_disc::SpatialDisc<'a>,
     pub temperal_disc: Option<fn()>,
     pub solver_param: SolverParameters, 
