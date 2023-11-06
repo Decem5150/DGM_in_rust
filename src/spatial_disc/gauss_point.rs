@@ -1,24 +1,30 @@
 pub struct GaussPoints {
+    pub cell_gp_number: usize,
+    pub edge_gp_number: usize,
     pub cell_points: Vec<[f64; 2]>,
     pub cell_weights: Vec<f64>,
-    pub edge_points: [Vec<f64>; 3],
+    pub edge_points: [Vec<[f64; 2]>; 3],
     pub edge_weights: Vec<f64>,
 }
 impl GaussPoints {
-    pub fn new(number_of_points: i64) -> GaussPoints {
-        let (cell_points, cell_weights) = gauss_points_triangle(number_of_points);
-        let (interval_points, edge_weights) = gauss_points_interval(number_of_points);
+    pub fn new(cell_gp: usize, edge_gp: usize) -> GaussPoints {
+        let (cell_points, cell_weights) = gauss_points_triangle(cell_gp);
+        let (interval_points, edge_weights) = gauss_points_interval(edge_gp);
         GaussPoints {
+            cell_gp_number: cell_gp,
+            edge_gp_number: edge_gp,
             cell_points,
             cell_weights,
-            edge_points: [interval_points.iter().map(|&x| ((x + 1.0) / 2.0, 0.0)).collect(), 
-                          interval_points.iter().map(|&x| ((1.0 - x) / 2.0, (1.0 + x) / 2.0)).collect(), 
-                          interval_points.iter().map(|&x| (0.0, (x + 1.0) / 2.0)).collect()],
+            edge_points: [
+                interval_points.iter().map(|&x| [(x + 1.0) / 2.0, 0.0]).collect(), 
+                interval_points.iter().map(|&x| [(1.0 - x) / 2.0, (1.0 + x) / 2.0]).collect(), 
+                interval_points.iter().map(|&x| [0.0, (x + 1.0) / 2.0]).collect()
+            ],
             edge_weights,
         }
     }
 }
-pub fn gauss_points_interval(number_of_points: i64) -> (Vec<f64>, Vec<f64>) {
+pub fn gauss_points_interval(number_of_points: usize) -> (Vec<f64>, Vec<f64>) {
     let (gauss_points, gauss_weights) = match number_of_points {
         3 => {
             let points: Vec<f64> = vec!{-0.7745966692414834, 0.0, 0.7745966692414834};
@@ -41,7 +47,7 @@ pub fn gauss_points_interval(number_of_points: i64) -> (Vec<f64>, Vec<f64>) {
     };
     (gauss_points, gauss_weights)
 }
-pub fn gauss_points_triangle(number_of_points: i64) -> (Vec<[f64; 2]>, Vec<f64>) {
+pub fn gauss_points_triangle(number_of_points: usize) -> (Vec<[f64; 2]>, Vec<f64>) {
     let (gauss_points, gauss_weights) = match number_of_points {
         4 => {
             let points: Vec<[f64; 2]> = vec![[0.33333333333, 0.33333333333], [0.2, 0.6], [0.2, 0.2], [0.6, 0.2]];

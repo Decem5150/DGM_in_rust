@@ -1,4 +1,4 @@
-use crate::solver::ConsVar;
+use crate::solver::{ConsVar, SolCoeff};
 use crate::spatial_disc::gauss_point::GaussPoints;
 use crate::spatial_disc::basis_function::DubinerBasis;
 use crate::spatial_disc::boundary::BoundaryCondition;
@@ -15,12 +15,12 @@ pub struct Element<'a> {
     pub vertices: Vec<&'a Vertex>,
     pub edges: Vec<&'a Edge<'a>>,
     pub neighbours: Vec<&'a Element<'a>>,
-    pub solution: Vec<ConsVar>,
-    pub residual: Vec<ConsVar>,
+    pub solution: SolCoeff,
+    pub residual: SolCoeff,
     pub jacob_det: f64,
     pub mass_mat_diag: Vec<f64>,
-    pub dphi_dx: Vec<Vec<f64>>,
-    pub dphi_dy: Vec<Vec<f64>>,
+    pub dphis_dx: Vec<Vec<f64>>,
+    pub dphis_dy: Vec<Vec<f64>>,
 }
 impl<'a> Element<'a> {
     pub fn compute_jacob_det(&mut self) {
@@ -55,8 +55,8 @@ pub struct Edge<'a> {
     //pub vis_flux: Vec<ConsVar>,
     pub jacob_det: f64,
     pub normal: [f64; 2],
-    pub index_in_left: usize,
-    pub index_in_right: usize,
+    pub ind_in_left_elem: usize,
+    pub ind_in_right_elem: usize,
 }
 impl<'a> Edge<'a> {
     pub fn compute_jacob_det(&mut self) {

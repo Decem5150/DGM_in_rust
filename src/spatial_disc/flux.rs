@@ -1,10 +1,11 @@
 use crate::solver::ConsVar;
 pub trait InvisFluxScheme<'a> {
-    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64);
+    fn compute(&self, left_value: &ConsVar, right_value: &ConsVar, normal: &[f64; 2], hcr: &f64) -> ConsVar;
 }
 pub struct HLLC;
 impl<'a> InvisFluxScheme<'a> for HLLC {
-    fn compute(&self, left_value: ConsVar, right_value: ConsVar, flux: &'a mut ConsVar, normal: [f64; 2], hcr: f64) {
+    fn compute(&self, left_value: &ConsVar, right_value: &ConsVar, normal: &[f64; 2], hcr: &f64) -> ConsVar {
+        let mut flux = ConsVar::default();
         let nx = normal[0];
         let ny = normal[1];
         let q1l = left_value.density;
@@ -40,13 +41,13 @@ impl<'a> InvisFluxScheme<'a> for HLLC {
             flux.x_momentum = f2l;
             flux.y_momentum = f3l;
             flux.energy = f4l;
-            return;
+            flux
         } else if sr <= 0.0 {
             flux.density = f1r;
             flux.x_momentum = f2r;
             flux.y_momentum = f3r;
             flux.energy = f4r;
-            return;
+            flux
         } else {
             let s_star = (p1r - p1l + q1l * vnl * (sl - vnl) - q1r * vnr * (sr - vnr)) / (q1l * (sl - vnl) - q1r * (sr - vnr));
             if s_star >= 0.0 {
@@ -54,14 +55,14 @@ impl<'a> InvisFluxScheme<'a> for HLLC {
                 flux.x_momentum = f2l + sl * (q2l - q2l * (sl - vnl) + (s_star - vnl) * (q1l - q1l * (sl - vnl))) / (sl - s_star);
                 flux.y_momentum = f3l + sl * (q3l - q3l * (sl - vnl)) / (sl - s_star);
                 flux.energy = f4l + sl * (q4l - q4l * (sl - vnl) + (s_star - vnl) * (q1l - q1l * (sl - vnl))) / (sl - s_star);
-                return;
+                flux
             }
             else {
                 flux.density = f1r + sr * (q1r - q1r * (sr - vnr)) / (sr - s_star);
                 flux.x_momentum = f2r + sr * (q2r - q2r * (sr - vnr) + (s_star - vnr) * (q1r - q1r * (sr - vnr))) / (sr - s_star);
                 flux.y_momentum = f3r + sr * (q3r - q3r * (sr - vnr)) / (sr - s_star);
                 flux.energy = f4r + sr * (q4r - q4r * (sr - vnr) + (s_star - vnr) * (q1r - q1r * (sr - vnr))) / (sr - s_star);
-                return;
+                flux
             }
         } 
     }
