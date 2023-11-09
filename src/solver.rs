@@ -1,5 +1,11 @@
+use ndarray::Array;
+use ndarray::Ix3;
+use ndarray::array;
 use super::spatial_disc;
 use super::mesh;
+use crate::spatial_disc::gauss_point::GaussPoints;
+use crate::spatial_disc::basis_function::DubinerBasis;
+use crate::temporal_disc;
 #[derive(Default)]
 #[derive(Clone)]
 pub struct ConsVar {
@@ -9,7 +15,7 @@ pub struct ConsVar {
     pub energy: f64,
 }
 impl ConsVar {
-    fn iter(&self) -> ConsVarIterator {
+    pub fn iter(&self) -> ConsVarIterator {
         ConsVarIterator {
             cons_var: self,
             index: 0,
@@ -52,13 +58,13 @@ pub struct SolCoeff {
     pub energy: Vec<f64>,
 }
 impl SolCoeff {
-    fn iter(&self) -> SolCoeffIterator {
+    pub fn iter(&self) -> SolCoeffIterator {
         SolCoeffIterator {
             sol_coeff: self,
             index: 0,
         }
     }
-    fn iter_mut(&mut self) -> SolCoeffIteratorMut {
+    pub fn iter_mut(&mut self) -> SolCoeffIteratorMut {
         SolCoeffIteratorMut {
             sol_coeff: self,
             index: 0,
@@ -140,23 +146,29 @@ pub struct FlowParameters {
 }
 pub struct Solver<'a> {
     pub mesh: mesh::Mesh<'a>,
+    pub solutions: Array<f64, Ix3>,
     pub spatial_disc: spatial_disc::SpatialDisc<'a>,
-    pub temperal_disc: Option<fn()>,
+    pub temperal_disc: temporal_disc::TemperalDisc<'a>,
     pub solver_param: SolverParameters, 
     pub flow_param: FlowParameters,
 }
 impl<'a> Solver<'a> {
-    pub fn compute_residuals(&mut self, u: &Vec<f64>, time: f64) {
-        self.mesh.
-        self.spatial_disc.compute_fluxes(self.residuals: &mut Vec<Vec<ConsVar>>, mesh: &mesh::Mesh<'a>);
+    pub fn set_residual_to_zero(residuals: &mut Vec<SolCoeff>) {
+        for residual in residuals.iter_mut() {
+            for res_var in residual.iter_mut() {
+                res_var.iter_mut().for_each(|res| *res = 0.0);
+            }
+        }
     }
+    
     pub fn time_step(&mut self, u: &Vec<f64>, time: f64) {
         
     }
     pub fn solve(&mut self, u: &Vec<f64>, time: f64) {
+        let mut residuals:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
+
         for step in 0..self.solver_param.number_of_time_steps {
             self.time_step(u, time);
         }
-        self.compute_residuals(u, time);
     }
 }
