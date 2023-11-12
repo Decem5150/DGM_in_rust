@@ -1,6 +1,7 @@
 use ndarray::Array;
 use ndarray::Ix3;
 use ndarray::array;
+use ndarray::{ArrayView, ArrayViewMut};
 use super::spatial_disc;
 use super::mesh;
 use crate::spatial_disc::gauss_point::GaussPoints;
@@ -153,20 +154,17 @@ pub struct Solver<'a> {
     pub flow_param: FlowParameters,
 }
 impl<'a> Solver<'a> {
-    pub fn set_residual_to_zero(residuals: &mut Vec<SolCoeff>) {
-        for residual in residuals.iter_mut() {
-            for res_var in residual.iter_mut() {
-                res_var.iter_mut().for_each(|res| *res = 0.0);
-            }
-        }
-    }
-    
     pub fn time_step(&mut self, u: &Vec<f64>, time: f64) {
         
     }
     pub fn solve(&mut self, u: &Vec<f64>, time: f64) {
+        /*
         let mut residuals:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
-
+        let mut u1:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
+        let mut u2:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
+        let mut u3:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
+        */
+        let u_vec = vec!(self.solutions.view_mut(), u1.view_mut(), u2.view_mut(), u3.view_mut());
         for step in 0..self.solver_param.number_of_time_steps {
             self.time_step(u, time);
         }

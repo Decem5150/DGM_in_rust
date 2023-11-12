@@ -2,11 +2,11 @@ use ndarray::Array;
 use ndarray::Ix1;
 use ndarray::ArrayView;
 pub trait InvisFluxScheme<'a> {
-    fn compute(&self, left_value: &Array<f64, Ix1>, right_value: &Array<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4];
+    fn compute(&self, left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4];
 }
 pub struct HLLC;
 impl<'a> InvisFluxScheme<'a> for HLLC {
-    fn compute(&self, left_value: &Array<f64, Ix1>, right_value: &Array<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4] {
+    fn compute(&self, left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4] {
         let mut flux = [0.0f64; 4];
         let nx = normal[0];
         let ny = normal[1];

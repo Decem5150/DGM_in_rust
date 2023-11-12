@@ -31,11 +31,6 @@ impl<'a> Element<'a> {
             }
         }
     }
-    pub fn divide_residual_by_mass_mat_diag(&mut self) {
-        for (res_var, &mass) in self.residual.iter_mut().zip(self.mass_mat_diag.iter()) {
-            res_var.iter_mut().for_each(|res| *res /= mass);
-        }
-    }
     pub fn compute_jacob_det(&mut self) {
         let x1 = self.vertices[0].x;
         let x2 = self.vertices[1].x;
