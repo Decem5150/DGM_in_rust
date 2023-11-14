@@ -20,7 +20,7 @@ pub struct Element<'a> {
     pub mass_mat_diag: Array<f64, Ix1>,
     pub dphis_dx: Array<f64, Ix2>,
     pub dphis_dy: Array<f64, Ix2>,
-    pub solution: ArrayView<'a, f64, Ix2>
+    pub solution_index: usize
 }
 impl<'a> Element<'a> {
     pub fn compute_mass_mat(&mut self, quad: &GaussPoints, basis: &DubinerBasis) {
@@ -74,8 +74,6 @@ pub struct Vertex {
 pub struct Edge<'a> {
     pub vertices: [&'a Vertex; 2],
     pub elements: [&'a Element<'a>; 2],
-    pub invis_flux: Array<f64, Ix2>,
-    //pub vis_flux: Vec<ConsVar>,
     pub jacob_det: f64,
     pub normal: [f64; 2],
     pub ind_in_left_elem: usize,
@@ -98,9 +96,15 @@ impl<'a> Edge<'a> {
         self.normal[1] = -(x2 - x1) / self.jacob_det;
     } 
 }
-#[derive(Default)]
+pub struct BoundaryEdge<'a> {
+    pub vertices: [&'a Vertex; 2],
+    pub internal_element: &'a Element<'a>,
+    pub jacob_det: f64,
+    pub normal: [f64; 2],
+    pub ind_in_internal_elem: usize,
+}
 pub struct Patch<'a> {
-    pub edges: Vec<&'a Edge<'a>>,
+    pub boundary_edges: Array<&'a BoundaryEdge<'a>, Ix1>,
     pub bc: Box<dyn BoundaryCondition>,
 }
 impl<'a> Patch<'a> {

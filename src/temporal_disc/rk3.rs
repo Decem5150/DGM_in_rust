@@ -11,8 +11,8 @@ pub struct RungeKutta3rd<'a> {
 }
 impl RungeKutta3rd <'_> {
     pub fn new<'a> (spatial_disc: &SpatialDisc) -> RungeKutta3rd<'a> {
-        let nelem = spatial_disc.mesh.elements.len();
-        let nbasis = spatial_disc.mesh.elements[0].solution.shape()[1];
+        let nelem = spatial_disc.solver_param.number_of_elements;
+        let nbasis = spatial_disc.solver_param.number_of_basis_functions;
         let neq = spatial_disc.solver_param.number_of_equations;
         let u1 = Array::zeros((nelem, neq, nbasis));
         let u2 = Array::zeros((nelem, neq, nbasis));
