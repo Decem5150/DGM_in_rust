@@ -1,12 +1,11 @@
 pub mod flux;
-pub mod quadrature;
 pub mod gauss_point;
 pub mod basis_function;
 pub mod boundary;
 use ndarray::Array;
+use ndarray::{ArrayView, ArrayViewMut};
 use ndarray::{Ix2, Ix3};
 use ndarray::{array, s};
-use ndarray::{ArrayView, ArrayViewMut};
 pub use crate::mesh::{Element, Edge, Mesh};
 pub use crate::solver::{SolverParameters, FlowParameters};
 use std::iter::zip;
@@ -21,12 +20,12 @@ pub struct SpatialDisc<'a> {
     pub flow_param: &'a FlowParameters,
 }
 impl<'a> SpatialDisc<'_> {
-    pub fn compute_residuals(&mut self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayViewMut<f64, Ix3>) {
+    pub fn compute_residuals(&mut self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
         self.integrate_over_cell(residuals, solutions);
         self.integrate_over_edges(residuals);
         self.divide_residual_by_mass_mat_diag(residuals);
     }
-    pub fn integrate_over_cell(&self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayViewMut<f64, Ix3>) {
+    pub fn integrate_over_cell(&self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_cell_gp;
         let neq = self.solver_param.number_of_equations;

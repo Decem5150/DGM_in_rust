@@ -129,7 +129,6 @@ impl<'a> Iterator for SolCoeffIteratorMut<'a> {
 pub struct SolverParameters {
     pub cfl: f64,
     pub final_time: f64,
-    pub number_of_time_steps: usize,
     pub number_of_cell_gp: usize,
     pub number_of_edge_gp: usize,
     pub number_of_equations: usize,
@@ -154,19 +153,7 @@ pub struct Solver<'a> {
     pub flow_param: FlowParameters,
 }
 impl<'a> Solver<'a> {
-    pub fn time_step(&mut self, u: &Vec<f64>, time: f64) {
-        
-    }
-    pub fn solve(&mut self, u: &Vec<f64>, time: f64) {
-        /*
-        let mut residuals:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
-        let mut u1:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
-        let mut u2:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
-        let mut u3:Array<f64, Ix3> = Array::zeros((self.solver_param.number_of_elements, self.solver_param.number_of_equations, self.solver_param.number_of_basis_functions));
-        */
-        let u_vec = vec!(self.solutions.view_mut(), u1.view_mut(), u2.view_mut(), u3.view_mut());
-        for step in 0..self.solver_param.number_of_time_steps {
-            self.time_step(u, time);
-        }
+    pub fn solve(&mut self) {
+        self.temperal_disc.time_march(self.solutions.view_mut());
     }
 }

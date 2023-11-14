@@ -11,6 +11,26 @@ pub struct DubinerBasis<'a> {
     pub gauss_points: &'a GaussPoints,
 }
 impl DubinerBasis<'_> {
+    fn new (dof: usize, gauss_points: &GaussPoints) -> DubinerBasis {
+        let gp_number = gauss_points.cell_gp_number;
+        let edge_gp_number = gauss_points.edge_gp_number;
+        let phis_cell_gps = Array::zeros((gp_number, dof));
+        let phis_edge_gps = Array::zeros((3, edge_gp_number, dof));
+        let dphis_dxi = Array::zeros((gp_number, dof));
+        let dphis_deta = Array::zeros((gp_number, dof));
+        let mut basis = DubinerBasis {
+            dof,
+            phis_cell_gps,
+            phis_edge_gps,
+            dphis_dxi,
+            dphis_deta,
+            gauss_points,
+        };
+        basis.compute_phi_cell();
+        basis.compute_phi_edge();
+        basis.compute_derivatives();
+        basis
+    }
     fn compute_phi_cell(&mut self) {
         let gp_number = self.gauss_points.cell_gp_number;
         let cell_points = &self.gauss_points.cell_points;

@@ -27,7 +27,7 @@ impl<'a> Element<'a> {
         self.mass_mat_diag.iter_mut().for_each(|mass| *mass = 0.0);
         for i in 0..basis.dof {
             for j in 0..quad.cell_points.len() {
-                self.mass_mat_diag[i] += quad.cell_weights[j] * basis.phis_cell_gps[j][i] * basis.phis_cell_gps[j][j] * self.jacob_det;
+                self.mass_mat_diag[i] += quad.cell_weights[j] * basis.phis_cell_gps[[j, i]] * basis.phis_cell_gps[[j, j]] * self.jacob_det;
             }
         }
     }
@@ -58,10 +58,10 @@ impl<'a> Element<'a> {
         let dxi_dx = -dy_deta / self.jacob_det;
         let dxi_dy = dx_deta / self.jacob_det;
 
-        for i in 0..self.dphis_dx.len() {
-            for j in 0..self.dphis_dx[i].len() {
-                self.dphis_dx[i][j] = basis.dphis_dxi[i][j] * dxi_dx + basis.dphis_deta[i][j] * deta_dx;
-                self.dphis_dy[i][j] = basis.dphis_dxi[i][j] * dxi_dy + basis.dphis_deta[i][j] * deta_dy;
+        for i in 0..self.dphis_dx.shape()[0] {
+            for j in 0..self.dphis_dx.shape()[1] {
+                self.dphis_dx[[i, j]] = basis.dphis_dxi[[i, j]] * dxi_dx + basis.dphis_deta[[i, j]] * deta_dx;
+                self.dphis_dy[[i, j]] = basis.dphis_dxi[[i, j]] * dxi_dy + basis.dphis_deta[[i, j]] * deta_dy;
             }
         }
     }
