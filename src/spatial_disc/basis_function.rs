@@ -1,6 +1,5 @@
 use ndarray::Array;
-use ndarray::{Ix1, Ix2, Ix3};
-use ndarray::array;
+use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;
 pub struct DubinerBasis<'a> {
     pub dof: usize,
@@ -40,9 +39,9 @@ impl DubinerBasis<'_> {
             self.phis_cell_gps[[i, 0]] = 1.0;
             self.phis_cell_gps[[i, 1]] = xi;
             self.phis_cell_gps[[i, 2]] = eta;
-            self.phis_cell_gps[[i, 3]] = xi * (2.0 * xi - 1.0);
-            self.phis_cell_gps[[i, 4]] = 4.0 * xi * eta;
-            self.phis_cell_gps[[i, 5]] = eta * (2.0 * eta - 1.0);
+            self.phis_cell_gps[[i, 3]] = xi * xi - 1.0 / 3.0;
+            self.phis_cell_gps[[i, 4]] = xi * eta;
+            self.phis_cell_gps[[i, 5]] = eta * eta - 1.0 / 3.0;
         }
     }
     fn compute_phi_edge(&mut self) {
@@ -70,15 +69,15 @@ impl DubinerBasis<'_> {
             self.dphis_dxi[[i, 0]] = 0.0;
             self.dphis_dxi[[i, 1]] = 1.0;
             self.dphis_dxi[[i, 2]] = 0.0;
-            self.dphis_dxi[[i, 3]] = 4.0 * xi - 1.0;
-            self.dphis_dxi[[i, 4]] = 4.0 * eta;
+            self.dphis_dxi[[i, 3]] = 2.0 * xi;
+            self.dphis_dxi[[i, 4]] = eta;
             self.dphis_dxi[[i, 5]] = 0.0;
             self.dphis_deta[[i, 0]] = 0.0;
             self.dphis_deta[[i, 1]] = 0.0;
             self.dphis_deta[[i, 2]] = 1.0;
             self.dphis_deta[[i, 3]] = 0.0;
-            self.dphis_deta[[i, 4]] = 4.0 * xi;
-            self.dphis_deta[[i, 5]] = 4.0 * eta - 1.0;
+            self.dphis_deta[[i, 4]] = xi;
+            self.dphis_deta[[i, 5]] = 2.0 * eta;
         }
     }
 }

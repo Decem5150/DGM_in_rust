@@ -1,20 +1,22 @@
 use ndarray::Array;
-use ndarray::{Ix1, Ix2, Ix3};
-use ndarray::array;
+use ndarray::{Ix1, Ix2};
 use ndarray::{ArrayView, ArrayViewMut};
-use crate::solver::{ConsVar, SolCoeff};
-use crate::spatial_disc::gauss_point::GaussPoints;
-use crate::spatial_disc::basis_function::DubinerBasis;
-use crate::spatial_disc::boundary::BoundaryCondition;
+use super::spatial_disc::gauss_point::GaussPoints;
+use super::spatial_disc::basis_function::DubinerBasis;
+use super::spatial_disc::boundary::BoundaryCondition;
 pub struct Mesh<'a> { 
     pub elements: Array<Element<'a>, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
     pub edges : Array<Edge<'a>, Ix1>,
     pub patches: Array<Patch<'a>, Ix1>,
 }
+pub struct Vertex {
+    pub x: f64,
+    pub y: f64,
+}
 pub struct Element<'a> {
     pub vertices: Array<&'a Vertex, Ix1>,
-    pub edges: Array<&'a Edge<'a>, Ix1>,
+    pub edges: Array<EdgeType<'a>, Ix1>,
     pub neighbours: Array<&'a Element<'a>, Ix1>,
     pub jacob_det: f64,
     pub mass_mat_diag: Array<f64, Ix1>,
@@ -66,10 +68,9 @@ impl<'a> Element<'a> {
         }
     }
 }
-#[derive(Default)]
-pub struct Vertex {
-    pub x: f64,
-    pub y: f64,
+enum EdgeType<'a> {
+    Internal(&'a Edge<'a>),
+    Boundary(&'a BoundaryEdge<'a>),
 }
 pub struct Edge<'a> {
     pub vertices: [&'a Vertex; 2],
@@ -78,6 +79,7 @@ pub struct Edge<'a> {
     pub normal: [f64; 2],
     pub ind_in_left_elem: usize,
     pub ind_in_right_elem: usize,
+    pub hcr: f64,
 }
 impl<'a> Edge<'a> {
     pub fn compute_jacob_det(&mut self) {
@@ -102,13 +104,14 @@ pub struct BoundaryEdge<'a> {
     pub jacob_det: f64,
     pub normal: [f64; 2],
     pub ind_in_internal_elem: usize,
+    pub hcr: f64,
 }
 pub struct Patch<'a> {
     pub boundary_edges: Array<&'a BoundaryEdge<'a>, Ix1>,
-    pub bc: Box<dyn BoundaryCondition>,
+    pub boundary_condition: Box<dyn BoundaryCondition<'a>>,
 }
 impl<'a> Patch<'a> {
-    pub fn apply_bc(&mut self) {
-        self.bc.apply();
+    pub fn apply_bc(&mut self, edge: &BoundaryEdge<'a>, left_values_gps: ArrayView<f64, Ix2>, right_values_gps: ArrayViewMut<f64, Ix2>) {
+        self.boundary_condition.apply(edge, left_values_gps, right_values_gps);
     }
 }

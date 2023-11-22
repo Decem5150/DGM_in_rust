@@ -1,6 +1,5 @@
 use ndarray::{Array, Zip};
 use ndarray::{Ix1, Ix2, Ix3};
-use ndarray::array;
 use ndarray::{ArrayView, ArrayViewMut};
 use crate::spatial_disc::SpatialDisc;
 use super::{TemperalDisc, TimeScheme};

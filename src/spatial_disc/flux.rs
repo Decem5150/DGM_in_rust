@@ -1,4 +1,3 @@
-use ndarray::Array;
 use ndarray::Ix1;
 use ndarray::ArrayView;
 pub trait InvisFluxScheme<'a> {
