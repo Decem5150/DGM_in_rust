@@ -5,19 +5,25 @@ use super::spatial_disc::gauss_point::GaussPoints;
 use super::spatial_disc::basis_function::DubinerBasis;
 use super::spatial_disc::boundary::BoundaryCondition;
 pub struct Mesh<'a> { 
-    pub elements: Array<Element<'a>, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
+    pub elements: Array<Element<'a>, Ix1>,
+    pub ghost_elements: Array<GhostElement<'a>, Ix1>,
     pub edges : Array<Edge<'a>, Ix1>,
+    pub boundary_edges: Array<BoundaryEdge<'a>, Ix1>,
     pub patches: Array<Patch<'a>, Ix1>,
 }
 pub struct Vertex {
     pub x: f64,
     pub y: f64,
 }
+pub enum ElementType<'a> {
+    Internal(&'a Element<'a>),
+    Ghost(&'a GhostElement<'a>),
+}
 pub struct Element<'a> {
     pub vertices: Array<&'a Vertex, Ix1>,
     pub edges: Array<EdgeType<'a>, Ix1>,
-    pub neighbours: Array<&'a Element<'a>, Ix1>,
+    pub neighbours: Array<ElementType<'a>, Ix1>,
     pub jacob_det: f64,
     pub mass_mat_diag: Array<f64, Ix1>,
     pub dphis_dx: Array<f64, Ix2>,
@@ -68,13 +74,23 @@ impl<'a> Element<'a> {
         }
     }
 }
-enum EdgeType<'a> {
+pub struct GhostElement<'a> {
+    pub vertices: Array<&'a Vertex, Ix1>,
+    pub edges: Array<EdgeType<'a>, Ix1>,
+    pub neighbours: Array<&'a Element<'a>, Ix1>,
+    pub jacob_det: f64,
+    pub mass_mat_diag: Array<f64, Ix1>,
+    pub dphis_dx: Array<f64, Ix2>,
+    pub dphis_dy: Array<f64, Ix2>,
+    pub solution_index: usize
+}
+pub enum EdgeType<'a> {
     Internal(&'a Edge<'a>),
     Boundary(&'a BoundaryEdge<'a>),
 }
 pub struct Edge<'a> {
     pub vertices: [&'a Vertex; 2],
-    pub elements: [&'a Element<'a>; 2],
+    pub elements: [ElementType<'a>; 2],
     pub jacob_det: f64,
     pub normal: [f64; 2],
     pub ind_in_left_elem: usize,
@@ -106,12 +122,17 @@ pub struct BoundaryEdge<'a> {
     pub ind_in_internal_elem: usize,
     pub hcr: f64,
 }
+pub enum BoundaryType {
+    NoSlipWall,
+    FreeSlipWall,
+    FarField,
+}
 pub struct Patch<'a> {
-    pub boundary_edges: Array<&'a BoundaryEdge<'a>, Ix1>,
-    pub boundary_condition: Box<dyn BoundaryCondition<'a>>,
+    pub edges: Array<&'a Edge<'a>, Ix1>,
+    pub boundary_condition: BoundaryType,
 }
 impl<'a> Patch<'a> {
-    pub fn apply_bc(&mut self, edge: &BoundaryEdge<'a>, left_values_gps: ArrayView<f64, Ix2>, right_values_gps: ArrayViewMut<f64, Ix2>) {
-        self.boundary_condition.apply(edge, left_values_gps, right_values_gps);
+    pub fn apply_bc(&mut self) {
+        match 
     }
 }

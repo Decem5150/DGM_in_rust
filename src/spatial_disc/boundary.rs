@@ -2,6 +2,10 @@ use ndarray::Array;
 use ndarray::{Ix1, Ix2};
 use ndarray::{ArrayView, ArrayViewMut};
 use crate::mesh::{Element, Edge, BoundaryEdge};
+pub fn no_slip_wall_bc() {
+    
+}
+/*
 pub trait BoundaryCondition<'a> {
     fn apply(&self, edge: &BoundaryEdge, left_values_gps: ArrayView<f64, Ix2>, right_values_gps: ArrayViewMut<f64, Ix2>);
 }
@@ -45,3 +49,4 @@ impl<'a> BoundaryCondition<'a> for FarField {
         }
     }
 }
+*/
