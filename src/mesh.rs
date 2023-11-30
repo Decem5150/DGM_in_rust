@@ -95,7 +95,7 @@ pub struct Edge<'a> {
     pub normal: [f64; 2],
     pub ind_in_left_elem: usize,
     pub ind_in_right_elem: usize,
-    pub hcr: f64,
+    //pub hcr: f64,
 }
 impl<'a> Edge<'a> {
     pub fn compute_jacob_det(&mut self) {
@@ -120,19 +120,21 @@ pub struct BoundaryEdge<'a> {
     pub jacob_det: f64,
     pub normal: [f64; 2],
     pub ind_in_internal_elem: usize,
-    pub hcr: f64,
+    //pub hcr: f64,
 }
 pub enum BoundaryType {
     NoSlipWall,
     FreeSlipWall,
     FarField,
 }
-pub struct Patch<'a> {
-    pub edges: Array<&'a Edge<'a>, Ix1>,
-    pub boundary_condition: BoundaryType,
+pub struct BoundaryQuantity {
+    pub rho: f64,
+    pub u: f64,
+    pub v: f64,
+    pub p: f64,
 }
-impl<'a> Patch<'a> {
-    pub fn apply_bc(&mut self) {
-        match 
-    }
+pub struct Patch<'a> {
+    pub edges: Array<&'a BoundaryEdge<'a>, Ix1>,
+    pub boundary_type: BoundaryType,
+    pub boundary_quantity: Option<BoundaryQuantity>,
 }
