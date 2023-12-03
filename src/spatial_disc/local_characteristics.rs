@@ -1,5 +1,5 @@
 use ndarray::Array;
-use ndarray::{ArrayView, ArrayViewMut};
+use ndarray::ArrayView;
 use ndarray::{Ix1, Ix2};
 pub fn compute_eigenmatrix(q: ArrayView<f64, Ix1>, nx: f64, ny: f64, hcr: f64) -> (Array<f64, Ix2>, Array<f64, Ix2>) {
     let u = q[1] / q[0];

@@ -4,18 +4,21 @@ pub mod basis_function;
 pub mod boundary;
 pub mod limiter;
 pub mod local_characteristics;
+use std::cell::RefCell;
+use std::rc::Weak;
 use ndarray::Array;
 use ndarray::{ArrayView, ArrayViewMut};
 use ndarray::{Ix2, Ix3};
 use ndarray::s;
-use super::mesh::{Element, Edge, Mesh, BoundaryEdge, Patch};
+use super::mesh::{Edge, Mesh};
 use super::solver::{SolverParameters, FlowParameters};
 pub struct SpatialDisc<'a> {
-    pub gauss_point: gauss_point::GaussPoints,
     pub inviscid_flux: Box<dyn flux::InvisFluxScheme<'a>>,
     // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
-    pub basis: basis_function::DubinerBasis<'a>,
-    pub mesh: &'a Mesh<'a>,
+    pub boundary_condition: boundary::BoundaryCondition<'a>,
+    pub basis: basis_function::DubinerBasis,
+    pub gauss_point: gauss_point::GaussPoints,
+    pub mesh: RefCell<Weak<Mesh<'a>>>,
     pub solver_param: &'a SolverParameters,
     pub flow_param: &'a FlowParameters,
 }
@@ -23,6 +26,7 @@ impl<'a> SpatialDisc<'_> {
     pub fn compute_residuals(&mut self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
         self.integrate_over_cell(residuals, solutions);
         self.integrate_over_edges(residuals, solutions);
+        self.boundary_condition.apply_bc(residuals, solutions);
         self.divide_residual_by_mass_mat_diag(residuals);
     }
     pub fn integrate_over_cell(&self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
@@ -47,21 +51,24 @@ impl<'a> SpatialDisc<'_> {
                 );
                 for ivar in 0..neq {
                     for ibasis in 0..nbasis {
-                        residuals[[ielem, ivar, ibasis]] += (f[ivar] * self.basis.dphis_dxi[[igp, ibasis]] + g[ivar] * self.basis.dphis_deta[[igp, ibasis]]) * self.gauss_point.cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                        residuals[[ielem, ivar, ibasis]] += (f[ivar] * self.basis.dphis_dxi[[igp, ibasis]] 
+                            + g[ivar] * self.basis.dphis_deta[[igp, ibasis]]) 
+                            * self.gauss_point.cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
         }
     }
     pub fn integrate_over_edges(&self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
+        let mesh = self.mesh.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
-        for edge in self.mesh.edges.iter() {
-            let ilelem = edge.ind_in_left_elem;
-            let irelem = edge.ind_in_right_elem;
-            let mut left_values_gps = Array::zeros([ngp, neq]);
-            let mut right_values_gps = Array::zeros([ngp, neq]);
+        for edge in mesh.edges.iter() {
+            let ilelem = edge.in_cell_index[0];
+            let irelem = edge.in_cell_index[1];
+            let mut left_values_gps: Array<f64, Ix2> = Array::zeros((ngp, neq));
+            let mut right_values_gps: Array<f64, Ix2> = Array::zeros((ngp, neq));
             self.compute_edge_values(edge, solutions, left_values_gps.view_mut(), right_values_gps.view_mut());
             for igp in 0..ngp {
                 let num_flux = self.inviscid_flux.compute(
@@ -79,16 +86,16 @@ impl<'a> SpatialDisc<'_> {
             }
         }
     }
-    pub fn compute_edge_values(&self, edge: &Edge<'a>, solutions: ArrayView<f64, Ix3>, mut left_values_gps: ArrayViewMut<f64, Ix2>, mut right_values_gps: ArrayViewMut<f64, Ix2>) {
+    pub fn compute_edge_values(&self, edge: &Edge, solutions: ArrayView<f64, Ix3>, mut left_values_gps: ArrayViewMut<f64, Ix2>, mut right_values_gps: ArrayViewMut<f64, Ix2>) {
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
-        let left_element = edge.elements[0];
-        let right_element = edge.elements[1];
-        let ilelem = edge.ind_in_left_elem;
-        let irelem = edge.ind_in_right_elem;
-        let left_sol = solutions.slice(s![ilelem, .., ..]);
-        let right_sol = solutions.slice(s![irelem, .., ..]);
+        let left_element = edge.ielements[0];
+        let right_element = edge.ielements[1];
+        let ilelem = edge.in_cell_index[0];
+        let irelem = edge.in_cell_index[1];
+        let left_sol = solutions.slice(s![left_element, .., ..]);
+        let right_sol = solutions.slice(s![right_element, .., ..]);
         for igp in 0..ngp {
             for ivar in 0..neq {
                 for ibasis in 0..nbasis {
@@ -96,22 +103,23 @@ impl<'a> SpatialDisc<'_> {
                 }
             }
         }
-        for igp in (0..ngp).rev() {
+        for igp in 0..ngp {
             for ivar in 0..neq {
                 for ibasis in 0..nbasis {
-                    right_values_gps[[igp, ivar]] += right_sol[[ivar, ibasis]] * self.basis.phis_edge_gps[[irelem, igp, ibasis]];
+                    right_values_gps[[igp, ivar]] += right_sol[[ivar, ibasis]] * self.basis.phis_edge_gps[[irelem, ngp - 1 - igp, ibasis]];
                 }
             }
         }
     }
     pub fn divide_residual_by_mass_mat_diag(&mut self, mut residuals: ArrayViewMut<f64, Ix3>) {
+        let mesh = self.mesh.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let neq = self.solver_param.number_of_equations;
         let nelem = self.solver_param.number_of_elements;
         for ielem in 0..nelem {
             for ivar in 0..neq {
                 for ibasis in 0..nbasis {
-                    residuals[[ielem, ivar, ibasis]] /= self.mesh.elements[ielem].mass_mat_diag[ibasis];
+                    residuals[[ielem, ivar, ibasis]] /= mesh.elements[ielem].mass_mat_diag[ibasis];
                 }
             }
         }

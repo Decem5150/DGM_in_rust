@@ -1,10 +1,10 @@
 pub mod rk3;
 use ndarray::Array;
-use ndarray::{Ix1, Ix2, Ix3};
-use ndarray::{ArrayView, ArrayViewMut};
+use ndarray::Ix3;
+use ndarray::ArrayViewMut;
 use crate::solver::{SolverParameters, Solver};
 use crate::spatial_disc::SpatialDisc;
-use crate::mesh::{Mesh, Element};
+use crate::mesh::Mesh;
 pub struct TemperalDisc<'a> {
     pub residuals: Array<f64, Ix3>,
     pub solver: &'a Solver<'a>,

@@ -1,15 +1,16 @@
+use std::rc::Weak;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;
-pub struct DubinerBasis<'a> {
+pub struct DubinerBasis {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,
     pub phis_edge_gps: Array<f64, Ix3>,
     pub dphis_dxi: Array<f64, Ix2>,
     pub dphis_deta: Array<f64, Ix2>,
-    pub gauss_points: &'a GaussPoints,
+    pub gauss_points: Weak<GaussPoints>,
 }
-impl DubinerBasis<'_> {
+impl DubinerBasis {
     fn new (dof: usize, gauss_points: &GaussPoints) -> DubinerBasis {
         let gp_number = gauss_points.cell_gp_number;
         let edge_gp_number = gauss_points.edge_gp_number;

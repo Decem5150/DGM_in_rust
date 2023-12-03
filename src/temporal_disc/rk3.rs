@@ -1,6 +1,5 @@
-use ndarray::{Array, Zip};
-use ndarray::{Ix1, Ix2, Ix3};
-use ndarray::{ArrayView, ArrayViewMut};
+use ndarray::{Array, ArrayViewMut, Zip};
+use ndarray::Ix3;
 use crate::spatial_disc::SpatialDisc;
 use super::{TemperalDisc, TimeScheme};
 pub struct RungeKutta3rd<'a> {
@@ -33,13 +32,13 @@ impl<'a> TimeScheme for RungeKutta3rd<'a> {
         TemperalDisc::set_residual_to_zero(residuals);
         self.spatial_disc.compute_residuals(residuals, self.u1.view());
         Zip::from(u).and(&mut self.u1).and(&mut self.u2).and(residuals).for_each(|u0, u1, u2, res| {
-            *u2 = 0.75 * *u0 + 0.25 * (*u1 + time_step * (*res));
+            *u2 = 0.75 * (*u0) + 0.25 * (*u1 + time_step * (*res));
         });
         // limiter
         TemperalDisc::set_residual_to_zero(residuals);
         self.spatial_disc.compute_residuals(residuals, self.u2.view());
         Zip::from(u).and(&mut self.u2).and(residuals).for_each(|u0, u2, res| {
-            *u0 = 1.0 / 3.0 * *u0 + 2.0 / 3.0 * (*u2 + time_step * (*res));
+            *u0 = 1.0 / 3.0 * (*u0) + 2.0 / 3.0 * (*u2 + time_step * (*res));
         });
     }
 }

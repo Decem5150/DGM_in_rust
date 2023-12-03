@@ -11,7 +11,7 @@ impl<'a> InvisFluxScheme<'a> for HLLC {
         let ny = normal[1];
         let ql = left_value;
         let qr = right_value;
-        let ul =ql[1] / ql[0];
+        let ul = ql[1] / ql[0];
         let ur = qr[1] / qr[0];
         let vl = ql[2] / ql[0];
         let vr = qr[2] / qr[0];
