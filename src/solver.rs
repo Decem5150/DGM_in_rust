@@ -1,8 +1,8 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use ndarray::Array;
 use ndarray::Ix3;
-use super::spatial_disc;
-use super::mesh;
-use crate::temporal_disc;
+use crate::{spatial_disc, temporal_disc, mesh, basis_function, gauss_point};
 pub struct SolverParameters {
     pub cfl: f64,
     pub final_time: f64,
@@ -22,12 +22,14 @@ pub struct FlowParameters {
     pub prandtl_number: f64,
 }
 pub struct Solver<'a> {
-    pub mesh: mesh::Mesh<'a>,
     pub solutions: Array<f64, Ix3>,
-    pub spatial_disc: spatial_disc::SpatialDisc<'a>,
-    pub temperal_disc: temporal_disc::TemperalDisc<'a>,
-    pub solver_param: SolverParameters, 
-    pub flow_param: FlowParameters,
+    pub mesh: Rc<mesh::Mesh<'a>>,
+    pub spatial_disc: Rc<spatial_disc::SpatialDisc<'a>>,
+    pub temperal_disc: Rc<temporal_disc::TemperalDisc<'a>>,
+    pub basis: Rc<basis_function::DubinerBasis>,
+    pub gauss_point: Rc<gauss_point::GaussPoints>,
+    pub solver_param: Rc<SolverParameters>, 
+    pub flow_param: Rc<FlowParameters>,
 }
 impl<'a> Solver<'a> {
     pub fn solve(&mut self) {

@@ -1,17 +1,18 @@
 use std::cell::RefCell;
-use std::rc::Weak;
+use std::rc::Rc;
 use ndarray::{Ix1, Ix2, Ix3};
 use ndarray::{Array, ArrayView, ArrayViewMut, Axis};
 use ndarray::s;
 use crate::mesh::{BoundaryEdge, BoundaryType, Patch, Mesh};
 use crate::solver::{SolverParameters, FlowParameters};
-use super::basis_function::DubinerBasis;
-use super::{local_characteristics, SpatialDisc};
+use crate::basis_function::{DubinerBasis, GaussPoints};
+use super::local_characteristics;
 pub struct BoundaryCondition<'a> {
-    pub spatial_disc: RefCell<Weak<SpatialDisc<'a>>>,
-    pub mesh: RefCell<Weak<Mesh<'a>>>,
-    pub solver_param: &'a SolverParameters,
-    pub flow_param: &'a FlowParameters,
+    pub basis: Rc<DubinerBasis>,
+    pub gauss_point: Rc<GaussPoints>,
+    pub mesh: Rc<Mesh<'a>>,
+    pub solver_param: Rc<SolverParameters>,
+    pub flow_param: Rc<FlowParameters>,
     pub patches: ArrayView<'a, Patch, Ix1>,
 }
 impl<'a> BoundaryCondition<'a> {
@@ -25,30 +26,26 @@ impl<'a> BoundaryCondition<'a> {
         }
     }
     pub fn wall(&self, solutions: ArrayView<f64, Ix3>, mut residuals: ArrayViewMut<f64, Ix3>, patch: &Patch) {
-        let mesh = self.mesh.borrow().upgrade().unwrap();
-        let spatial_disc = self.spatial_disc.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
         let hcr = self.flow_param.hcr;
         for &iedge in patch.iedges.iter() {
-            let ielem = mesh.boundary_edges[iedge].ielement;
-            let nx = mesh.boundary_edges[iedge].normal[0];
-            let ny = mesh.boundary_edges[iedge].normal[1];
+            let ielem = self.mesh.boundary_edges[iedge].ielement;
+            let nx = self.mesh.boundary_edges[iedge].normal[0];
+            let ny = self.mesh.boundary_edges[iedge].normal[1];
             let mut left_values_gps: Array<f64, Ix2> = Array::zeros((ngp, neq));
-            self.compute_boundary_edges_values(&mesh.boundary_edges[iedge], solutions, left_values_gps.view_mut());
+            self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions, left_values_gps.view_mut());
             for igp in 0..ngp {
                 for ibasis in 0..nbasis {
                     let pressure = (hcr - 1.0) * (left_values_gps[[igp, 3]] - 0.5 * (left_values_gps[[igp, 1]] * left_values_gps[[igp, 1]] + left_values_gps[[igp, 2]] * left_values_gps[[igp, 2]]) / left_values_gps[[igp, 0]]);
-                    residuals[[ielem, 1, ibasis]] -= pressure * spatial_disc.basis.phis_edge_gps[[ielem, igp, ibasis]] * nx * 0.5 * mesh.boundary_edges[iedge].jacob_det;
-                    residuals[[ielem, 2, ibasis]] -= pressure * spatial_disc.basis.phis_edge_gps[[ielem, igp, ibasis]] * ny * 0.5 * mesh.boundary_edges[iedge].jacob_det;
+                    residuals[[ielem, 1, ibasis]] -= pressure * self.basis.phis_edge_gps[[ielem, igp, ibasis]] * nx * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
+                    residuals[[ielem, 2, ibasis]] -= pressure * self.basis.phis_edge_gps[[ielem, igp, ibasis]] * ny * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
                 }
             }
         }
     }
     pub fn far_field(&self, solutions: ArrayView<f64, Ix3>, residuals: ArrayViewMut<f64, Ix3>, patch: &Patch) {
-        let mesh = self.mesh.borrow().upgrade().unwrap();
-        let spatial_disc = self.spatial_disc.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
@@ -61,11 +58,11 @@ impl<'a> BoundaryCondition<'a> {
             boundary_quantity.p / (hcr - 1.0) + 0.5 * boundary_quantity.rho * (boundary_quantity.u.powi(2) + boundary_quantity.v.powi(2))
             ]);
         for &iedge in patch.iedges.iter() {
-            let ielem = mesh.boundary_edges[iedge].ielement;
-            let nx = mesh.boundary_edges[iedge].normal[0];
-            let ny = mesh.boundary_edges[iedge].normal[1];
+            let ielem = self.mesh.boundary_edges[iedge].ielement;
+            let nx = self.mesh.boundary_edges[iedge].normal[0];
+            let ny = self.mesh.boundary_edges[iedge].normal[1];
             let mut left_values_gps: Array<f64, Ix2> = Array::zeros((ngp, neq));
-            self.compute_boundary_edges_values(&mesh.boundary_edges[iedge], solutions, left_values_gps.view_mut()); 
+            self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions, left_values_gps.view_mut()); 
             for igp in 0..ngp {
                 for ibasis in 0..nbasis {
                     let u = left_values_gps[[igp, 1]] / left_values_gps[[igp, 0]];
@@ -93,15 +90,13 @@ impl<'a> BoundaryCondition<'a> {
                         q_new[0] * h_new * vn_new
                     ];
                     for ivar in 0..neq {
-                        residuals[[ielem, ivar, ibasis]] -= flux[ivar] * spatial_disc.basis.phis_edge_gps[[ielem, igp, ibasis]] * 0.5 * mesh.boundary_edges[iedge].jacob_det;
+                        residuals[[ielem, ivar, ibasis]] -= flux[ivar] * self.basis.phis_edge_gps[[ielem, igp, ibasis]] * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
                     }
                 }
             }
         }
     }
     pub fn compute_boundary_edges_values(&self, edge: &BoundaryEdge, solutions: ArrayView<f64, Ix3>, mut left_values_gps: ArrayViewMut<f64, Ix2>) {
-        let mesh = self.mesh.borrow().upgrade().unwrap();
-        let spatial_disc = self.spatial_disc.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
@@ -111,7 +106,7 @@ impl<'a> BoundaryCondition<'a> {
         for igp in 0..ngp {
             for ivar in 0..neq {
                 for ibasis in 0..nbasis {
-                    left_values_gps[[igp, ivar]] += left_sol[[ivar, ibasis]] * spatial_disc.basis.phis_edge_gps[[ielem, igp, ibasis]];
+                    left_values_gps[[igp, ivar]] += left_sol[[ivar, ibasis]] * self.basis.phis_edge_gps[[ielem, igp, ibasis]];
                 }
             }
         }

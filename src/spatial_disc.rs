@@ -1,26 +1,26 @@
 pub mod flux;
-pub mod gauss_point;
-pub mod basis_function;
 pub mod boundary;
 pub mod limiter;
 pub mod local_characteristics;
 use std::cell::RefCell;
-use std::rc::Weak;
+use std::rc::{Weak, Rc};
 use ndarray::Array;
 use ndarray::{ArrayView, ArrayViewMut};
 use ndarray::{Ix2, Ix3};
 use ndarray::s;
 use super::mesh::{Edge, Mesh};
 use super::solver::{SolverParameters, FlowParameters};
+use crate::basis_function::DubinerBasis;
+use crate::gauss_point::GaussPoints;
 pub struct SpatialDisc<'a> {
     pub inviscid_flux: Box<dyn flux::InvisFluxScheme<'a>>,
     // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
     pub boundary_condition: boundary::BoundaryCondition<'a>,
-    pub basis: basis_function::DubinerBasis,
-    pub gauss_point: gauss_point::GaussPoints,
-    pub mesh: RefCell<Weak<Mesh<'a>>>,
-    pub solver_param: &'a SolverParameters,
-    pub flow_param: &'a FlowParameters,
+    pub basis: Rc<DubinerBasis>,
+    pub gauss_point: Rc<GaussPoints>,
+    pub mesh: Rc<Mesh>,
+    pub solver_param: Rc<SolverParameters>,
+    pub flow_param: Rc<FlowParameters>,
 }
 impl<'a> SpatialDisc<'_> {
     pub fn compute_residuals(&mut self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
@@ -60,11 +60,10 @@ impl<'a> SpatialDisc<'_> {
         }
     }
     pub fn integrate_over_edges(&self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
-        let mesh = self.mesh.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
-        for edge in mesh.edges.iter() {
+        for edge in self.mesh.edges.iter() {
             let ilelem = edge.in_cell_index[0];
             let irelem = edge.in_cell_index[1];
             let mut left_values_gps: Array<f64, Ix2> = Array::zeros((ngp, neq));
@@ -112,14 +111,13 @@ impl<'a> SpatialDisc<'_> {
         }
     }
     pub fn divide_residual_by_mass_mat_diag(&mut self, mut residuals: ArrayViewMut<f64, Ix3>) {
-        let mesh = self.mesh.borrow().upgrade().unwrap();
         let nbasis = self.solver_param.number_of_basis_functions;
         let neq = self.solver_param.number_of_equations;
         let nelem = self.solver_param.number_of_elements;
         for ielem in 0..nelem {
             for ivar in 0..neq {
                 for ibasis in 0..nbasis {
-                    residuals[[ielem, ivar, ibasis]] /= mesh.elements[ielem].mass_mat_diag[ibasis];
+                    residuals[[ielem, ivar, ibasis]] /= self.mesh.elements[ielem].mass_mat_diag[ibasis];
                 }
             }
         }

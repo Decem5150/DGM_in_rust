@@ -1,12 +1,11 @@
 use ndarray::{Ix1, Ix3};
 use ndarray::Array;
 use ndarray::{ArrayView, ArrayViewMut};
-pub mod hweno;
+pub mod weno;
 use crate::mesh::{Mesh, Element, Edge, BoundaryEdge};
 use crate::solver::{SolverParameters, FlowParameters};
-use super::basis_function::{DubinerBasis, GaussPoints};
+use crate::basis_function::{DubinerBasis, GaussPoints};
 pub enum LimiterType {
-    HWENO,
     WENO,
     None,
 }
@@ -20,7 +19,7 @@ pub struct Limiter<'a> {
     pub detector_type: DetectorType,
     pub mesh: &'a Mesh<'a>,
     pub is_troubled: Array<bool, Ix1>,
-    pub basis: DubinerBasis<'a>,
+    pub basis: DubinerBasis,
     pub gauss_points: &'a GaussPoints,
     pub solver_param: &'a SolverParameters,
     pub flow_param: &'a FlowParameters,
