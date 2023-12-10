@@ -1,13 +1,13 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
-use sprs::{TriMat, CsMat};
 pub use super::gauss_point::GaussPoints;
 pub struct DubinerBasis {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,
     pub phis_edge_gps: Array<f64, Ix3>,
-    pub derivatives: Array<CsMat<f64>, Ix2>,
+    pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
     pub gauss_points: Rc<GaussPoints>,
 }
 impl DubinerBasis {
@@ -16,7 +16,7 @@ impl DubinerBasis {
         let edge_gp_number = gauss_points.edge_gp_number;
         let phis_cell_gps = Array::zeros((gp_number, dof));
         let phis_edge_gps = Array::zeros((3, edge_gp_number, dof));
-        let derivatives: Array<CsMat<f64>, _> = Array::default((gp_number, dof));
+        let derivatives: Array<HashMap<(usize, usize), f64>, Ix2> = Array::from_elem((gp_number, dof), HashMap::new());
         let mut basis = DubinerBasis {
             dof,
             phis_cell_gps,
@@ -66,33 +66,36 @@ impl DubinerBasis {
         for i in 0..ngp {
             let xi = gauss_points[[i, 0]];
             let eta = gauss_points[[i, 1]];
-            // 1st basis
-            let mut derivatives = TriMat::new((3, 3));
-            self.derivatives[[i, 0]] = derivatives.to_csr();
-            // 2nd basis
-            let mut derivatives = TriMat::new((3, 3));
-            derivatives.add_triplet(1, 0, 1.0);
-            self.derivatives[[i, 1]] = derivatives.to_csr();
-            // 3rd basis
-            let mut derivatives = TriMat::new((3, 3));
-            derivatives.add_triplet(0, 1, 1.0);
-            self.derivatives[[i, 2]] = derivatives.to_csr();
-            // 4th basis 
-            let mut derivatives = TriMat::new((3, 3));
-            derivatives.add_triplet(1, 0, 4.0 * xi - 1.0);
-            derivatives.add_triplet(2, 0, 4.0);
-            self.derivatives[[i, 3]] = derivatives.to_csr();
-            // 5th basis
-            let mut derivatives = TriMat::new((3, 3));
-            derivatives.add_triplet(1, 0, 4.0 * eta);
-            derivatives.add_triplet(0, 1, 4.0 * xi);
-            derivatives.add_triplet(1, 1, 4.0);
-            self.derivatives[[i, 4]] = derivatives.to_csr();
-            // 6th basis
-            let mut derivatives = TriMat::new((3, 3));
-            derivatives.add_triplet(0, 1, 4.0 * eta - 1.0);
-            derivatives.add_triplet(0, 2, 4.0);
-            self.derivatives[[i, 5]] = derivatives.to_csr();
+            self.derivatives[[i, 0]].insert((1, 0), 0.0);
+            self.derivatives[[i, 0]].insert((0, 1), 0.0);
+            self.derivatives[[i, 0]].insert((2, 0), 0.0);
+            self.derivatives[[i, 0]].insert((1, 1), 0.0);
+            self.derivatives[[i, 0]].insert((0, 2), 0.0);
+            self.derivatives[[i, 1]].insert((1, 0), 1.0);
+            self.derivatives[[i, 1]].insert((0, 1), 0.0);
+            self.derivatives[[i, 1]].insert((2, 0), 0.0);
+            self.derivatives[[i, 1]].insert((1, 1), 0.0);
+            self.derivatives[[i, 1]].insert((0, 2), 0.0);
+            self.derivatives[[i, 2]].insert((1, 0), 0.0);
+            self.derivatives[[i, 2]].insert((0, 1), 1.0);
+            self.derivatives[[i, 2]].insert((2, 0), 0.0);
+            self.derivatives[[i, 2]].insert((1, 1), 0.0);
+            self.derivatives[[i, 2]].insert((0, 2), 0.0);
+            self.derivatives[[i, 3]].insert((1, 0), 4.0 * xi - 1.0);
+            self.derivatives[[i, 3]].insert((0, 1), 0.0);
+            self.derivatives[[i, 3]].insert((2, 0), 4.0);
+            self.derivatives[[i, 3]].insert((1, 1), 0.0);
+            self.derivatives[[i, 3]].insert((0, 2), 0.0);
+            self.derivatives[[i, 4]].insert((1, 0), 4.0 * eta);
+            self.derivatives[[i, 4]].insert((0, 1), 4.0 * xi);
+            self.derivatives[[i, 4]].insert((2, 0), 0.0);
+            self.derivatives[[i, 4]].insert((1, 1), 4.0);
+            self.derivatives[[i, 4]].insert((0, 2), 0.0);
+            self.derivatives[[i, 5]].insert((1, 0), 0.0);
+            self.derivatives[[i, 5]].insert((0, 1), 4.0 * eta - 1.0);
+            self.derivatives[[i, 5]].insert((2, 0), 0.0);
+            self.derivatives[[i, 5]].insert((1, 1), 0.0);
+            self.derivatives[[i, 5]].insert((0, 2), 4.0);
         }
     }
 }
