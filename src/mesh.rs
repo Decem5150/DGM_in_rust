@@ -28,7 +28,24 @@ impl Mesh {
             }
         }
     }
+    pub fn compute_normal(&mut self) {
+        for edge in self.edges.iter_mut() {
+            let x1 = self.vertices[edge.ivertices[0]].x;
+            let x2 = self.vertices[edge.ivertices[1]].x;
+            let y1 = self.vertices[edge.ivertices[0]].y;
+            let y2 = self.vertices[edge.ivertices[1]].y;
+            edge.normal[0] = (y2 - y1) / edge.jacob_det;
+            edge.normal[1] = -(x2 - x1) / edge.jacob_det;
+        }
+    }
     pub fn compute_jacob_det(&mut self) {
+        for edge in self.edges.iter_mut() {
+            let x1 = self.vertices[edge.ivertices[0]].x;
+            let x2 = self.vertices[edge.ivertices[1]].x;
+            let y1 = self.vertices[edge.ivertices[0]].y;
+            let y2 = self.vertices[edge.ivertices[1]].y;
+            edge.jacob_det = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
+        }
         for element in self.elements.iter_mut() {
             let x1 = self.vertices[element.ivertices[0]].x;
             let x2 = self.vertices[element.ivertices[1]].x;
@@ -37,6 +54,21 @@ impl Mesh {
             let y2 = self.vertices[element.ivertices[1]].y;
             let y3 = self.vertices[element.ivertices[2]].y;
             element.jacob_det = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
+        }
+    }
+    pub fn compute_circle_circumradius(&mut self) {
+        for element in self.elements.iter_mut() {
+            let x1 = self.vertices[element.ivertices[0]].x;
+            let x2 = self.vertices[element.ivertices[1]].x;
+            let x3 = self.vertices[element.ivertices[2]].x;
+            let y1 = self.vertices[element.ivertices[0]].y;
+            let y2 = self.vertices[element.ivertices[1]].y;
+            let y3 = self.vertices[element.ivertices[2]].y;
+            let a = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
+            let b = ((x3 - x2).powi(2) + (y3 - y2).powi(2)).sqrt();
+            let c = ((x1 - x3).powi(2) + (y1 - y3).powi(2)).sqrt();
+            let s = (a + b + c) / 2.0;
+            element.circumradius = a * b * c / (4.0 * (s * (s - a) * (s - b) * (s - c)).sqrt());
         }
     }
     pub fn compute_and_derivatives(&mut self) -> Array<f64, Ix2> {
@@ -73,6 +105,7 @@ pub enum NormalDirection {
     Inward,
     Outward,
 }
+#[derive(Default)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
     pub iedges: Array<usize, Ix1>,
@@ -87,6 +120,7 @@ pub enum EdgeType<'a> {
     Internal(&'a Edge),
     Boundary(&'a BoundaryEdge),
 }
+#[derive(Default)]
 pub struct Edge {
     pub ielements: [usize; 2],
     pub ivertices: [usize; 2],
@@ -95,23 +129,7 @@ pub struct Edge {
     pub in_cell_index: [usize; 2],
     //pub hcr: f64,
 }
-impl Edge {
-    pub fn compute_jacob_det(&mut self) {
-        let x1 = self.vertices[0].x;
-        let x2 = self.vertices[1].x;
-        let y1 = self.vertices[0].y;
-        let y2 = self.vertices[1].y;
-        self.jacob_det = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
-    }
-    pub fn compute_normal(&mut self) {
-        let x1 = self.vertices[0].x;
-        let x2 = self.vertices[1].x;
-        let y1 = self.vertices[0].y;
-        let y2 = self.vertices[1].y;
-        self.normal[0] = (y2 - y1) / self.jacob_det;
-        self.normal[1] = -(x2 - x1) / self.jacob_det;
-    } 
-}
+#[derive(Default)]
 pub struct BoundaryEdge {
     pub ivertices: [usize; 2],
     pub ielement: usize,

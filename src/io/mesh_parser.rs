@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::{path::Path, fs::File, io};
 use std::io::BufRead;
 use crate::mesh::Vertex;
-struct EdgeBlock {
-    node_pairs: Vec<[usize; 2]>,
-    physical_name: String,
+pub struct EdgeBlock {
+    pub node_pairs: Vec<[usize; 2]>,
+    pub physical_name: String,
 }
-struct ElementBlock {
-    node_ids: Vec<[usize; 3]>,
+pub struct ElementBlock {
+    pub node_ids: Vec<[usize; 3]>,
 }
 enum CurrentState {
     StandingBy,
@@ -35,8 +35,8 @@ impl GmshParser {
         let path = Path::new(self.filename);
         let file = File::open(path)?;
         let reader = io::BufReader::new(file);
-        let mut physical_names = HashMap::new();
-        let mut entities_to_physical_tags = HashMap::new();
+        let mut physical_names: HashMap<usize, String> = HashMap::new();
+        let mut entities_to_physical_tags: HashMap<usize, usize> = HashMap::new();
         let mut nodes: Vec<Vertex> = Vec::new();
         let mut edges: Vec<EdgeBlock> = Vec::new();
         let mut elements: Vec<ElementBlock> = Vec::new();
@@ -140,7 +140,7 @@ impl GmshParser {
                     let edge_block = edges.last_mut().unwrap();
                     let node_id_1 = values[1].parse::<usize>().unwrap();
                     let node_id_2 = values[2].parse::<usize>().unwrap();
-                    edge_block.node_pairs.push([node_id_1, node_id_2]);
+                    edge_block.node_pairs.push([node_id_1 - 1, node_id_2 - 1]);
                     if line_count == max_line_count {
                         current_state = CurrentState::ReadingFirstLineOfBlocks;
                     }
@@ -153,7 +153,7 @@ impl GmshParser {
                     let node_id_1 = values[1].parse::<usize>().unwrap();
                     let node_id_2 = values[2].parse::<usize>().unwrap();
                     let node_id_3 = values[3].parse::<usize>().unwrap();
-                    element_block.node_ids.push([node_id_1, node_id_2, node_id_3]);
+                    element_block.node_ids.push([node_id_1 - 1, node_id_2 - 1, node_id_3 - 1]);
                     if line_count == max_line_count {
                         current_state = CurrentState::ReadingFirstLineOfBlocks;
                     }
