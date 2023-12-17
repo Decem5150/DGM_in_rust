@@ -108,13 +108,17 @@ pub enum NormalDirection {
 #[derive(Default)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
-    pub iedges: Array<usize, Ix1>,
+    pub iedges: Array<IEdgeType, Ix1>,
     pub ineighbours: Array<usize, Ix1>,
     pub mass_mat_diag: Array<f64, Ix1>,
     pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
     pub normal_directions: Array<NormalDirection, Ix1>,
     pub jacob_det: f64,
     pub circumradius: f64,
+}
+pub enum IEdgeType {
+    Internal(usize),
+    Boundary(usize),
 }
 pub enum EdgeType<'a> {
     Internal(&'a Edge),
