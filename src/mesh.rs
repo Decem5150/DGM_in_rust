@@ -9,13 +9,13 @@ use crate::basis_function::DubinerBasis;
 pub struct Mesh { 
     pub elements: Array<Element, Ix1>,
     pub edges : Array<Edge, Ix1>,
-    pub internal_elements: Array<usize, Ix1>,
-    pub boundary_elements: Array<usize, Ix1>,
+    pub indices_internal_elements: Array<usize, Ix1>,
+    pub indices_boundary_elements: Array<usize, Ix1>,
     pub boundary_edges: Array<BoundaryEdge, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
     pub patches: Array<Patch, Ix1>,
     pub basis: Rc<DubinerBasis>,
-    pub gauss_point: Rc<GaussPoints>,
+    pub gauss_points: Rc<GaussPoints>,
 }
 impl Mesh {
     pub fn compute_mass_mat(&mut self) {
@@ -96,6 +96,26 @@ impl Mesh {
             }
         }
     }
+    pub fn set_neighbours(&mut self) {
+        for element in self.elements.iter_mut() {
+            for (in_cell_index, &iedge) in element.iedges.iter().enumerate() {
+                match iedge {
+                    EdgeTypeAndIndex::Boundary(_) => (),
+                    EdgeTypeAndIndex::Internal(iedge) => {
+                        let edge = &self.edges[iedge];
+                        match element.normal_directions[in_cell_index] {
+                            NormalDirection::Inward => {
+                                element.ineighbours[in_cell_index] = Some(edge.ielements[0]);
+                            }
+                            NormalDirection::Outward => {
+                                element.ineighbours[in_cell_index] = Some(edge.ielements[1]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 pub struct Vertex {
     pub x: f64,
@@ -108,17 +128,17 @@ pub enum NormalDirection {
 #[derive(Default)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
-    pub iedges: Array<IEdgeType, Ix1>,
-    pub ineighbours: Array<usize, Ix1>,
+    pub iedges: Array<EdgeTypeAndIndex, Ix1>,
+    pub ineighbours: Array<Option<usize>, Ix1>,
     pub mass_mat_diag: Array<f64, Ix1>,
     pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
     pub normal_directions: Array<NormalDirection, Ix1>,
     pub jacob_det: f64,
     pub circumradius: f64,
 }
-pub enum IEdgeType {
-    Internal(usize),
+pub enum EdgeTypeAndIndex {
     Boundary(usize),
+    Internal(usize),
 }
 pub enum EdgeType<'a> {
     Internal(&'a Edge),
@@ -130,7 +150,7 @@ pub struct Edge {
     pub ivertices: [usize; 2],
     pub jacob_det: f64,
     pub normal: [f64; 2],
-    pub in_cell_index: [usize; 2],
+    pub in_cell_indices: [usize; 2],
     //pub hcr: f64,
 }
 #[derive(Default)]

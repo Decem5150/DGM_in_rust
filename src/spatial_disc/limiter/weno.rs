@@ -26,7 +26,7 @@ impl<'a> Limiter<'a> {
             let edge = &self.mesh.edges[iedge];
             let ilelem = edge.in_cell_index[0];
             let irelem = edge.in_cell_index[1];
-            let ineighbour = element.ineighbours[ilelem];
+            let ineighbour = element.ineighbours[ilelem].unwrap();
             for igp in 0..ngp {
                 let mut rho = 0.0;
                 let mut rho_u = 0.0;

@@ -23,6 +23,7 @@ impl GaussPoints {
         let ip31 = interval_points.mapv(|x| 0.0);
         let ip32 = interval_points.mapv(|x| (x + 1.0) / 2.0);
         let ip3 = stack(Axis(0), &[ip31.view(), ip32.view()]).unwrap().t().to_owned();
+        
         let edge_points = stack(Axis(0), &[ip1.view(), ip2.view(), ip3.view()]).unwrap();
         
         GaussPoints {

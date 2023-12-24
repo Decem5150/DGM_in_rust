@@ -1,0 +1,9 @@
+{
+    "cfl" : 0.2,
+    "final_time": 5.0,
+    "number_of_cell_gp": 4,
+    "number_of_edge_gp": 3,
+    "number_of_equations": 4,
+    "number_of_basis_functions": 6,
+    "hcr": 1.4
+}

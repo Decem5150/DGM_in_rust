@@ -9,7 +9,7 @@ pub struct TemperalDisc<'a> {
     pub residuals: Array<f64, Ix3>,
     pub solver: &'a Solver<'a>,
     pub spatial_disc: &'a SpatialDisc<'a>,
-    pub mesh: &'a Mesh<'a>,
+    pub mesh: &'a Mesh,
     pub solver_param: &'a SolverParameters,
     pub current_time: f64,
     pub time_step: f64,

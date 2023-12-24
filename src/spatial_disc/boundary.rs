@@ -10,7 +10,7 @@ use super::local_characteristics;
 pub struct BoundaryCondition<'a> {
     pub basis: Rc<DubinerBasis>,
     pub gauss_point: Rc<GaussPoints>,
-    pub mesh: Rc<Mesh<'a>>,
+    pub mesh: Rc<Mesh>,
     pub solver_param: Rc<SolverParameters>,
     pub flow_param: Rc<FlowParameters>,
     pub patches: ArrayView<'a, Patch, Ix1>,

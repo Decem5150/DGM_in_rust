@@ -11,7 +11,7 @@ pub struct DubinerBasis {
     pub gauss_points: Rc<GaussPoints>,
 }
 impl DubinerBasis {
-    fn new (dof: usize, gauss_points: Rc<GaussPoints>) -> DubinerBasis {
+    pub fn new (dof: usize, gauss_points: Rc<GaussPoints>) -> DubinerBasis {
         let gp_number = gauss_points.cell_gp_number;
         let edge_gp_number = gauss_points.edge_gp_number;
         let phis_cell_gps = Array::zeros((gp_number, dof));
