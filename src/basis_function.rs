@@ -1,17 +1,16 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;
-pub struct DubinerBasis {
+pub struct DubinerBasis<'a> {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,
     pub phis_edge_gps: Array<f64, Ix3>,
     pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
-    pub gauss_points: Rc<GaussPoints>,
+    pub gauss_points: &'a GaussPoints,
 }
-impl DubinerBasis {
-    pub fn new (dof: usize, gauss_points: Rc<GaussPoints>) -> DubinerBasis {
+impl<'a> DubinerBasis<'a> {
+    pub fn new (dof: usize, gauss_points: &GaussPoints) -> DubinerBasis<'a> {
         let gp_number = gauss_points.cell_gp_number;
         let edge_gp_number = gauss_points.edge_gp_number;
         let phis_cell_gps = Array::zeros((gp_number, dof));

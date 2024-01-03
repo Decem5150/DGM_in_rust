@@ -1,27 +1,18 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use ndarray::{Array, Ix1};
 use crate::basis_function::{DubinerBasis, GaussPoints};
+use crate::io::boundary_condition_parser::FreeStreamCondition;
 use crate::io::mesh_parser::{EdgeBlock, ElementBlock, GmshParser};
-use crate::io::param_parser::ParametersParser;
-use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, NormalDirection, Mesh};
+use crate::io::param_parser::Parameters;
+use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, NormalDirection, Mesh, BoundaryQuantity};
 use crate::solver::{SolverParameters, Solver, FlowParameters, MeshParameters};
-use crate::spatial_disc::{self, boundary, InviscidFluxScheme};
-use crate::temporal_disc;
-struct EdgeBuilder {
-    pub ielements: Option<[usize; 2]>,
-    pub ivertices: Option<[usize; 2]>,
-}
-struct ElementBuilder {
-    pub ivertices: Array<usize, Ix1>,
-    pub iedges: Array<usize, Ix1>,
-    pub ineighbours: Array<usize, Ix1>,
-}
+use crate::spatial_disc::{InviscidFluxScheme, SpatialDisc};
+use crate::temporal_disc::TemperalDisc;
 pub struct Initializer;
-impl Initializer {
-    pub fn initialize_solver(&self, mesh_parser: GmshParser, parameters_parser: ParametersParser) -> Solver {
-        let parameters = parameters_parser.parse();
-        let solver_parameters = Rc::new(SolverParameters {
+impl<'a> Initializer {
+    pub fn initialize_solver() -> Solver<'a> {
+        let parameters = Parameters::parse();
+        let solver_parameters = Box::new(SolverParameters {
             cfl: parameters.cfl,
             final_time: parameters.final_time,
             number_of_cell_gp: parameters.number_of_cell_gp,
@@ -29,20 +20,20 @@ impl Initializer {
             number_of_equations: parameters.number_of_equations,
             number_of_basis_functions: parameters.number_of_basis_functions,
         });
-        let flow_parameters = Rc::new(FlowParameters {
+        let flow_parameters = Box::new(FlowParameters {
             hcr: parameters.hcr,
         });
-        let gauss_points = Rc::new(GaussPoints::new(solver_parameters.number_of_cell_gp, solver_parameters.number_of_edge_gp));
-        let basis = Rc::new(DubinerBasis::new(solver_parameters.number_of_basis_functions, gauss_points.clone()));
-        let (vertices_vec, boundary_edge_blocks, element_blocks) = mesh_parser.parse();
-        let (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements) = self.process_mesh(vertices_vec, boundary_edge_blocks, element_blocks);
-        let mesh_parameters = Rc::new(MeshParameters {
+        let gauss_points = Box::new(GaussPoints::new(solver_parameters.number_of_cell_gp, solver_parameters.number_of_edge_gp));
+        let basis = Box::new(DubinerBasis::new(solver_parameters.number_of_basis_functions, gauss_points.as_ref()));
+        let (vertices_vec, boundary_edge_blocks, element_blocks) = GmshParser::parse(parameters.mesh_file.as_str());
+        let (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements) = Initializer::process_mesh(solver_parameters.as_ref(), vertices_vec, boundary_edge_blocks, element_blocks);
+        let mesh_parameters = Box::new(MeshParameters {
             number_of_elements: elements.len(),
             number_of_edges: edges.len(),
             number_of_vertices: vertices.len(),
             number_of_patches: patches.len(),
         });
-        let mesh = Rc::new(Mesh {
+        let mut mesh = Box::new(Mesh {
             vertices,
             edges,
             boundary_edges,
@@ -50,31 +41,29 @@ impl Initializer {
             patches,
             indices_internal_elements,
             indices_boundary_elements,
-            basis: basis.clone(),
-            gauss_points: gauss_points.clone(),
+            basis: basis.as_ref(),
+            gauss_points: gauss_points.as_ref(),
         });
-        let boundary_condition = boundary::BoundaryCondition {
-            basis: basis.clone(),
-            gauss_point: gauss_points.clone(),
-            mesh: mesh.clone(),
-            solver_param: solver_parameters.clone(),
-            flow_param: flow_parameters.clone(),
-            patches: mesh.patches.view(),
-        };
+        mesh.compute_jacob_det();
+        mesh.compute_normal();
+        mesh.compute_mass_mat();
         let inviscid_flux_scheme = InviscidFluxScheme::HLLC;
-        let spatial_disc = spatial_disc::SpatialDisc {
-            inviscid_flux_scheme,
-            boundary_condition,
-            basis: basis.clone(),
-            gauss_point: gauss_points.clone(),
-            mesh: mesh.clone(),
-            solver_param: solver_parameters.clone(),
-            mesh_param: mesh_parameters.clone(),
-            flow_param: flow_parameters.clone(),
-        };
-        let temporal_disc = 
+        let spatial_disc = Box::new(SpatialDisc::new(basis.as_ref(), gauss_points.as_ref(), mesh.as_ref(), solver_parameters.as_ref(), mesh_parameters.as_ref(), flow_parameters.as_ref()));
+        let temporal_disc = Box::new(TemperalDisc::new(mesh.as_ref(), spatial_disc.as_ref(), solver_parameters.as_ref(), mesh_parameters.as_ref(), flow_parameters.as_ref()));
+        let solutions = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, solver_parameters.number_of_basis_functions));
+        Solver {
+            solutions,
+            mesh,
+            spatial_disc,
+            temporal_disc,
+            basis,
+            gauss_points,
+            solver_param: solver_parameters,
+            mesh_param: mesh_parameters,
+            flow_param: flow_parameters,
+        }
     }
-    pub fn process_mesh(&self, vertices_vec: Vec<Vertex>, boundary_edge_blocks: Vec<EdgeBlock>, element_blocks: Vec<ElementBlock>) -> (Array<Vertex, Ix1>, Array<Edge, Ix1>, Array<BoundaryEdge, Ix1>, Array<Element, Ix1>, Array<Patch, Ix1>, Array<usize, Ix1>, Array<usize, Ix1>) {
+    pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, boundary_edge_blocks: Vec<EdgeBlock>, element_blocks: Vec<ElementBlock>) -> (Array<Vertex, Ix1>, Array<Edge, Ix1>, Array<BoundaryEdge, Ix1>, Array<Element, Ix1>, Array<Patch, Ix1>, Array<usize, Ix1>, Array<usize, Ix1>) {
         let vertices = Array::from(vertices_vec);
         let mut boundary_edges_vec = Vec::new();
         let mut edges_vec = Vec::new();
@@ -83,6 +72,7 @@ impl Initializer {
         let mut edge_map: HashMap<[usize; 2], EdgeTypeAndIndex> = HashMap::new();
         let mut indices_internal_elements_vec = Vec::new();
         let mut indices_boundary_elements_vec = Vec::new();
+        let free_stream_condition = FreeStreamCondition::parse();
         for block in boundary_edge_blocks.into_iter() {
             let physical_name = block.physical_name;
             let start_index = boundary_edges_vec.len();
@@ -110,9 +100,17 @@ impl Initializer {
                 edge_map.insert([node_1, node_2], EdgeTypeAndIndex::Boundary(boundary_edges_vec.len() - 1));
             }
             let end_index = boundary_edges_vec.len() - 1;
-            let boundary_type = match physical_name.as_str() {
-                "wall" => BoundaryType::Wall,
-                "farfield" => BoundaryType::FarField,
+            let (boundary_type, boundary_quantity) = match physical_name.as_str() {
+                "wall" => (BoundaryType::Wall, None),
+                "farfield" => {
+                    let sound_speed = (free_stream_condition.hcr * free_stream_condition.pressure / free_stream_condition.density).sqrt();
+                    (BoundaryType::FarField, Some(BoundaryQuantity {
+                        rho: free_stream_condition.density,
+                        u: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.cos(),
+                        v: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.sin(),
+                        p: free_stream_condition.pressure,
+                    }))
+                },
                 _ => panic!("Boundary type not implemented"),
             };
             let patch = Patch {
@@ -196,8 +194,8 @@ impl Initializer {
                 let normal_directions = Array::from(normal_directions);
                 let ineighbours = Array::from(vec![None; 3]);
                 let mass_mat_diag = Array::zeros(3);
-                let ngp = self.number_of_cell_gp;
-                let nbasis = self.number_of_basis_functions;
+                let ngp = solver_param.number_of_cell_gp;
+                let nbasis = solver_param.number_of_basis_functions;
                 let derivatives: Array<HashMap<(usize, usize), f64>, _> = Array::from_shape_fn((ngp, nbasis), |_| {
                     HashMap::new()
                 });
@@ -219,14 +217,14 @@ impl Initializer {
                     indices_boundary_elements_vec.push(elements_vec.len() - 1);
                 }
             }
-            let vertices = Array::from(vertices_vec);
-            let edges = Array::from(edges_vec);
-            let boundary_edges = Array::from(boundary_edges_vec);
-            let elements = Array::from(elements_vec);
-            let patches = Array::from(patches_vec);
-            let indices_internal_elements = Array::from(indices_internal_elements_vec);
-            let indices_boundary_elements = Array::from(indices_boundary_elements_vec);
-            (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements)
         }
+        let vertices = Array::from(vertices_vec);
+        let edges = Array::from(edges_vec);
+        let boundary_edges = Array::from(boundary_edges_vec);
+        let elements = Array::from(elements_vec);
+        let patches = Array::from(patches_vec);
+        let indices_internal_elements = Array::from(indices_internal_elements_vec);
+        let indices_boundary_elements = Array::from(indices_boundary_elements_vec);
+        (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements)
     }
 }

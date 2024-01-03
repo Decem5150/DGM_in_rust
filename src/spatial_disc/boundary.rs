@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use ndarray::{Ix1, Ix2, Ix3};
 use ndarray::{Array, ArrayView, ArrayViewMut, Axis};
 use ndarray::s;
@@ -8,16 +6,15 @@ use crate::solver::{SolverParameters, FlowParameters};
 use crate::basis_function::{DubinerBasis, GaussPoints};
 use super::local_characteristics;
 pub struct BoundaryCondition<'a> {
-    pub basis: Rc<DubinerBasis>,
-    pub gauss_point: Rc<GaussPoints>,
-    pub mesh: Rc<Mesh>,
-    pub solver_param: Rc<SolverParameters>,
-    pub flow_param: Rc<FlowParameters>,
-    pub patches: ArrayView<'a, Patch, Ix1>,
+    pub basis: &'a DubinerBasis<'a>,
+    pub gauss_points: &'a GaussPoints,
+    pub mesh: &'a Mesh<'a>,
+    pub solver_param: &'a SolverParameters,
+    pub flow_param: &'a FlowParameters,
 }
 impl<'a> BoundaryCondition<'a> {
     pub fn apply_bc(&self, residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
-        for patch in self.patches.iter() {
+        for patch in self.mesh.patches.iter() {
             match patch.boundary_type {
                 BoundaryType::Wall => self.wall(solutions, residuals, patch),
                 BoundaryType::FarField => self.far_field(solutions, residuals, patch),

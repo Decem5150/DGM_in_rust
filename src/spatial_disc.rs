@@ -2,12 +2,12 @@ pub mod flux;
 pub mod boundary;
 pub mod limiter;
 pub mod local_characteristics;
-use std::cell::RefCell;
-use std::rc::Rc;
 use ndarray::Array;
 use ndarray::{ArrayView, ArrayViewMut};
 use ndarray::{Ix2, Ix3};
 use ndarray::s;
+use self::boundary::BoundaryCondition;
+
 use super::mesh::{Edge, Mesh};
 use super::solver::{SolverParameters, FlowParameters};
 use crate::basis_function::DubinerBasis;
@@ -19,15 +19,35 @@ pub enum InviscidFluxScheme {
 pub struct SpatialDisc<'a> {
     pub inviscid_flux_scheme: InviscidFluxScheme,
     // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
-    pub boundary_condition: boundary::BoundaryCondition<'a>,
-    pub basis: Rc<DubinerBasis>,
-    pub gauss_point: Rc<GaussPoints>,
-    pub mesh: Rc<Mesh>,
-    pub solver_param: Rc<SolverParameters>,
-    pub mesh_param: Rc<MeshParameters>,
-    pub flow_param: Rc<FlowParameters>,
+    pub boundary_condition: BoundaryCondition<'a>,
+    pub basis: &'a DubinerBasis<'a>,
+    pub gauss_points: &'a GaussPoints,
+    pub mesh: &'a Mesh<'a>,
+    pub solver_param: &'a SolverParameters,
+    pub mesh_param: &'a MeshParameters,
+    pub flow_param: &'a FlowParameters,
 }
-impl<'a> SpatialDisc<'_> {
+impl<'a> SpatialDisc<'a> {
+    pub fn new(basis: &DubinerBasis, gauss_points: &GaussPoints, mesh: &Mesh, solver_param: &SolverParameters, mesh_param: &MeshParameters, flow_param: &FlowParameters) -> SpatialDisc<'a> {
+        let boundary_condition = BoundaryCondition {
+            basis,
+            gauss_points,
+            mesh,
+            solver_param,
+            flow_param,
+        };
+        SpatialDisc {
+            inviscid_flux_scheme: InviscidFluxScheme::HLLC,
+            // viscous_flux: Box::new(viscous_flux),
+            boundary_condition,
+            basis,
+            gauss_points,
+            mesh,
+            solver_param,
+            mesh_param,
+            flow_param,
+        }
+    }
     pub fn compute_residuals(&mut self, mut residuals: ArrayViewMut<f64, Ix3>, solutions: ArrayView<f64, Ix3>) {
         self.integrate_over_cell(residuals, solutions);
         self.integrate_over_edges(residuals, solutions);
@@ -58,7 +78,7 @@ impl<'a> SpatialDisc<'_> {
                     for ibasis in 0..nbasis {
                         residuals[[ielem, ivar, ibasis]] += (f[ivar] * self.basis.dphis_dxi[[igp, ibasis]] 
                             + g[ivar] * self.basis.dphis_deta[[igp, ibasis]]) 
-                            * self.gauss_point.cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                            * self.gauss_points.cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }

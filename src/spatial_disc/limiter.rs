@@ -17,9 +17,9 @@ pub enum DetectorType {
 pub struct Limiter<'a> {
     pub limiter_type: LimiterType,
     pub detector_type: DetectorType,
-    pub mesh: &'a Mesh,
+    pub mesh: &'a Mesh<'a>,
     pub is_troubled: Array<bool, Ix1>,
-    pub basis: DubinerBasis,
+    pub basis: &'a DubinerBasis<'a>,
     pub gauss_points: &'a GaussPoints,
     pub solver_param: &'a SolverParameters,
     pub flow_param: &'a FlowParameters,

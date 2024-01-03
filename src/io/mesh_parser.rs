@@ -22,18 +22,11 @@ enum CurrentState {
     ReadingElementBlocks,
     ReadingFirstLineOfBlocks,
 }
-pub struct GmshParser {
-    pub filename: &'static str,
-}
+pub struct GmshParser;
 impl GmshParser {
-    pub fn new(filename: &'static str) -> Self {
-        Self {
-            filename,
-        }
-    }
-    pub fn parse(&self) -> (Vec<Vertex>, Vec<EdgeBlock>, Vec<ElementBlock>) {
-        let path = Path::new(self.filename);
-        let file = File::open(path)?;
+    pub fn parse(filename: &'static str) -> (Vec<Vertex>, Vec<EdgeBlock>, Vec<ElementBlock>) {
+        let path = Path::new(filename);
+        let file = File::open(path).expect("Failed to open file");
         let reader = io::BufReader::new(file);
         let mut physical_names: HashMap<usize, String> = HashMap::new();
         let mut entities_to_physical_tags: HashMap<usize, usize> = HashMap::new();
@@ -44,7 +37,7 @@ impl GmshParser {
         let mut line_count: usize = 0;
         let mut max_line_count: usize = 0;
         for line in reader.lines() {
-            let line = line?;
+            let line = line.expect("Failed to read line");
             // Check the current section of the file
             if line.starts_with("$End") {
                 current_state = CurrentState::StandingBy;

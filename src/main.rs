@@ -7,6 +7,7 @@ mod gauss_point;
 mod io;
 mod initialization;
 fn main() {
-    let mut solver = solver::Solver::default();
-    let mut mesh = mesh::Mesh::default();
+    let mut solver = initialization::Initializer::initialize_solver();
+    solver.set_initial_solution();
+
 }

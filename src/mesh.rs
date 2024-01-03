@@ -1,12 +1,10 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use ndarray::{Array, ArrayView};
 use ndarray::{Ix1, Ix2};
 use crate::spatial_disc::SpatialDisc;
 use crate::gauss_point::GaussPoints;
 use crate::basis_function::DubinerBasis;
-pub struct Mesh { 
+pub struct Mesh<'a> { 
     pub elements: Array<Element, Ix1>,
     pub edges : Array<Edge, Ix1>,
     pub indices_internal_elements: Array<usize, Ix1>,
@@ -14,16 +12,16 @@ pub struct Mesh {
     pub boundary_edges: Array<BoundaryEdge, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
     pub patches: Array<Patch, Ix1>,
-    pub basis: Rc<DubinerBasis>,
-    pub gauss_points: Rc<GaussPoints>,
+    pub basis: &'a DubinerBasis<'a>,
+    pub gauss_points: &'a GaussPoints,
 }
-impl Mesh {
+impl<'a> Mesh<'a> {
     pub fn compute_mass_mat(&mut self) {
         for element in self.elements.iter_mut() {
             element.mass_mat_diag.iter_mut().for_each (|mass| *mass = 0.0);
             for ibasis in 0..self.basis.dof {
-                for igp in 0..self.gauss_point.cell_gp_number {
-                    element.mass_mat_diag[ibasis] += self.gauss_point.cell_weights[igp] * self.basis.phis_cell_gps[[igp, ibasis]] * self.basis.phis_cell_gps[[igp, ibasis]] * element.jacob_det;
+                for igp in 0..self.gauss_points.cell_gp_number {
+                    element.mass_mat_diag[ibasis] += self.gauss_points.cell_weights[igp] * self.basis.phis_cell_gps[[igp, ibasis]] * self.basis.phis_cell_gps[[igp, ibasis]] * element.jacob_det;
                 }
             }
         }
@@ -71,7 +69,7 @@ impl Mesh {
             element.circumradius = a * b * c / (4.0 * (s * (s - a) * (s - b) * (s - c)).sqrt());
         }
     }
-    pub fn compute_and_derivatives(&mut self) -> Array<f64, Ix2> {
+    pub fn compute_derivatives(&mut self) {
         for element in self.elements.iter_mut() {
             let x1 = self.vertices[element.ivertices[0]].x;
             let x2 = self.vertices[element.ivertices[1]].x;
@@ -87,7 +85,7 @@ impl Mesh {
             let deta_dy = -dx_dxi / element.jacob_det;
             let dxi_dx = -dy_deta / element.jacob_det;
             let dxi_dy = dx_deta / element.jacob_det;
-            for igp in 0..self.gauss_point.cell_gp_number {
+            for igp in 0..self.gauss_points.cell_gp_number {
                 for ibasis in 0..self.basis.dof {
                     element.derivatives[[igp, ibasis]].insert((1, 0), dxi_dx * self.basis.derivatives[[igp, ibasis]].get(&(1, 1)).unwrap() + deta_dx * self.basis.derivatives[[igp, ibasis]].get(&(0, 2)).unwrap());
                     element.derivatives[[igp, ibasis]].insert((0, 1), dxi_dy * self.basis.derivatives[[igp, ibasis]].get(&(1, 0)).unwrap() + deta_dy * self.basis.derivatives[[igp, ibasis]].get(&(0, 1)).unwrap());
@@ -125,7 +123,6 @@ pub enum NormalDirection {
     Inward,
     Outward,
 }
-#[derive(Default)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
     pub iedges: Array<EdgeTypeAndIndex, Ix1>,
@@ -144,7 +141,6 @@ pub enum EdgeType<'a> {
     Internal(&'a Edge),
     Boundary(&'a BoundaryEdge),
 }
-#[derive(Default)]
 pub struct Edge {
     pub ielements: [usize; 2],
     pub ivertices: [usize; 2],
@@ -153,7 +149,6 @@ pub struct Edge {
     pub in_cell_indices: [usize; 2],
     //pub hcr: f64,
 }
-#[derive(Default)]
 pub struct BoundaryEdge {
     pub ivertices: [usize; 2],
     pub ielement: usize,
