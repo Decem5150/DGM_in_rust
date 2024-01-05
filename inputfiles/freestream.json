@@ -4,5 +4,6 @@
     "mach_number": 0.5,
     "freestream_density": 1.0,
     "freestream_pressure": 1.0,
-    "freestream_temperature": 1.0
+    "freestream_temperature": 1.0,
+    "hcr": 1.4
 }

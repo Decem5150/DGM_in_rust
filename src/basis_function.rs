@@ -2,15 +2,14 @@ use std::collections::HashMap;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;
-pub struct DubinerBasis<'a> {
+pub struct DubinerBasis {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,
     pub phis_edge_gps: Array<f64, Ix3>,
     pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
-    pub gauss_points: &'a GaussPoints,
 }
-impl<'a> DubinerBasis<'a> {
-    pub fn new (dof: usize, gauss_points: &GaussPoints) -> DubinerBasis<'a> {
+impl DubinerBasis {
+    pub fn new (dof: usize, gauss_points: &GaussPoints) -> DubinerBasis {
         let gp_number = gauss_points.cell_gp_number;
         let edge_gp_number = gauss_points.edge_gp_number;
         let phis_cell_gps = Array::zeros((gp_number, dof));
@@ -21,16 +20,15 @@ impl<'a> DubinerBasis<'a> {
             phis_cell_gps,
             phis_edge_gps,
             derivatives,
-            gauss_points,
         };
-        basis.compute_phi_cell();
-        basis.compute_phi_edge();
-        basis.compute_derivatives();
+        basis.compute_phi_cell(gauss_points);
+        basis.compute_phi_edge(gauss_points);
+        basis.compute_derivatives(gauss_points);
         basis
     }
-    fn compute_phi_cell(&mut self) {
-        let gp_number = self.gauss_points.cell_gp_number;
-        let cell_points = &self.gauss_points.cell_points;
+    fn compute_phi_cell(&mut self, gauss_points: &GaussPoints) {
+        let gp_number = gauss_points.cell_gp_number;
+        let cell_points = &gauss_points.cell_points;
         for i in 0..gp_number {
             let xi = cell_points[[i, 0]];
             let eta = cell_points[[i, 1]];
@@ -42,9 +40,9 @@ impl<'a> DubinerBasis<'a> {
             self.phis_cell_gps[[i, 5]] = eta * (2.0 * eta - 1.0);
         }
     }
-    fn compute_phi_edge(&mut self) {
-        let gp_number = self.gauss_points.edge_gp_number;
-        let edge_points = &self.gauss_points.edge_points;
+    fn compute_phi_edge(&mut self, gauss_points: &GaussPoints) {
+        let gp_number = gauss_points.edge_gp_number;
+        let edge_points = &gauss_points.edge_points;
         for iedge in 0..3 {
             for igp in 0..gp_number {
                 let xi = edge_points[[iedge, igp, 0]];
@@ -58,10 +56,10 @@ impl<'a> DubinerBasis<'a> {
             }
         }
     }
-    fn compute_derivatives(&mut self) {
-        let ngp = self.gauss_points.cell_gp_number;
+    fn compute_derivatives(&mut self, gauss_points: &GaussPoints) {
+        let ngp = gauss_points.cell_gp_number;
         let nbasis = self.dof;
-        let gauss_points = &self.gauss_points.cell_points;
+        let gauss_points = &gauss_points.cell_points;
         for i in 0..ngp {
             let xi = gauss_points[[i, 0]];
             let eta = gauss_points[[i, 1]];

@@ -1,27 +1,24 @@
 use std::collections::HashMap;
 use ndarray::{Array, ArrayView};
 use ndarray::{Ix1, Ix2};
-use crate::spatial_disc::SpatialDisc;
 use crate::gauss_point::GaussPoints;
 use crate::basis_function::DubinerBasis;
-pub struct Mesh<'a> { 
+pub struct Mesh { 
     pub elements: Array<Element, Ix1>,
-    pub edges : Array<Edge, Ix1>,
+    pub edges: Array<Edge, Ix1>,
     pub indices_internal_elements: Array<usize, Ix1>,
     pub indices_boundary_elements: Array<usize, Ix1>,
     pub boundary_edges: Array<BoundaryEdge, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
     pub patches: Array<Patch, Ix1>,
-    pub basis: &'a DubinerBasis<'a>,
-    pub gauss_points: &'a GaussPoints,
 }
-impl<'a> Mesh<'a> {
-    pub fn compute_mass_mat(&mut self) {
+impl Mesh {
+    pub fn compute_mass_mat(&mut self, basis: &DubinerBasis, gauss_points: &GaussPoints, ngp: usize, nbasis: usize) {
         for element in self.elements.iter_mut() {
             element.mass_mat_diag.iter_mut().for_each (|mass| *mass = 0.0);
-            for ibasis in 0..self.basis.dof {
-                for igp in 0..self.gauss_points.cell_gp_number {
-                    element.mass_mat_diag[ibasis] += self.gauss_points.cell_weights[igp] * self.basis.phis_cell_gps[[igp, ibasis]] * self.basis.phis_cell_gps[[igp, ibasis]] * element.jacob_det;
+            for ibasis in 0..nbasis {
+                for igp in 0..ngp {
+                    element.mass_mat_diag[ibasis] += gauss_points.cell_weights[igp] * basis.phis_cell_gps[[igp, ibasis]] * basis.phis_cell_gps[[igp, ibasis]] * element.jacob_det;
                 }
             }
         }
@@ -69,6 +66,7 @@ impl<'a> Mesh<'a> {
             element.circumradius = a * b * c / (4.0 * (s * (s - a) * (s - b) * (s - c)).sqrt());
         }
     }
+    /*
     pub fn compute_derivatives(&mut self) {
         for element in self.elements.iter_mut() {
             let x1 = self.vertices[element.ivertices[0]].x;
@@ -94,10 +92,11 @@ impl<'a> Mesh<'a> {
             }
         }
     }
+    */
     pub fn set_neighbours(&mut self) {
         for element in self.elements.iter_mut() {
-            for (in_cell_index, &iedge) in element.iedges.iter().enumerate() {
-                match iedge {
+            for (in_cell_index, iedge) in element.iedges.iter().enumerate() {
+                match *iedge {
                     EdgeTypeAndIndex::Boundary(_) => (),
                     EdgeTypeAndIndex::Internal(iedge) => {
                         let edge = &self.edges[iedge];
@@ -133,6 +132,7 @@ pub struct Element {
     pub jacob_det: f64,
     pub circumradius: f64,
 }
+#[derive(Clone)]
 pub enum EdgeTypeAndIndex {
     Boundary(usize),
     Internal(usize),

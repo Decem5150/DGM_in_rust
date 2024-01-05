@@ -24,8 +24,8 @@ enum CurrentState {
 }
 pub struct GmshParser;
 impl GmshParser {
-    pub fn parse(filename: &'static str) -> (Vec<Vertex>, Vec<EdgeBlock>, Vec<ElementBlock>) {
-        let path = Path::new(filename);
+    pub fn parse(filename: String) -> (Vec<Vertex>, Vec<EdgeBlock>, Vec<ElementBlock>) {
+        let path = Path::new(&filename);
         let file = File::open(path).expect("Failed to open file");
         let reader = io::BufReader::new(file);
         let mut physical_names: HashMap<usize, String> = HashMap::new();
@@ -93,9 +93,8 @@ impl GmshParser {
                 CurrentState::ReadingNodes => {
                     let values: Vec<&str> = line.split_whitespace().collect();
                     if values.len() == 3 {
-                        let node_id = values[0].parse::<usize>().unwrap();
-                        let x = values[1].parse::<f64>().unwrap();
-                        let y = values[2].parse::<f64>().unwrap();
+                        let x = values[0].parse::<f64>().unwrap();
+                        let y = values[1].parse::<f64>().unwrap();
                         nodes.push(Vertex { x, y });
                     }
                     continue;
@@ -110,7 +109,7 @@ impl GmshParser {
                     let entity_tag = values[1].parse::<usize>().unwrap();
                     let num_of_elements = values[3].parse::<usize>().unwrap();
                     let &physical_tag = entities_to_physical_tags.get(&entity_tag).unwrap();
-                    let &physical_name = physical_names.get(&physical_tag).unwrap();
+                    let physical_name = physical_names.get(&physical_tag).unwrap().clone();
                     if entity_dim == 1 {
                         let mut edge_block = EdgeBlock{physical_name, node_pairs: Vec::new()};
                         edge_block.node_pairs.reserve(num_of_elements);

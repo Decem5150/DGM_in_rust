@@ -1,7 +1,7 @@
 use std::fs;
 use serde::Deserialize;
 use serde_json;
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Parameters {
     pub mesh_file: String,
     pub cfl: f64,
