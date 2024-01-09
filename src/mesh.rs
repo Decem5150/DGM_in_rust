@@ -18,7 +18,7 @@ impl Mesh {
             element.mass_mat_diag.iter_mut().for_each (|mass| *mass = 0.0);
             for ibasis in 0..nbasis {
                 for igp in 0..ngp {
-                    element.mass_mat_diag[ibasis] += gauss_points.cell_weights[igp] * basis.phis_cell_gps[[igp, ibasis]] * basis.phis_cell_gps[[igp, ibasis]] * element.jacob_det;
+                    element.mass_mat_diag[ibasis] += gauss_points.cell_weights[igp] * basis.phis_cell_gps[[igp, ibasis]] * basis.phis_cell_gps[[igp, ibasis]] * 0.5 * element.jacob_det;
                 }
             }
         }
@@ -118,10 +118,12 @@ pub struct Vertex {
     pub x: f64,
     pub y: f64,
 }
+#[derive(Debug)]
 pub enum NormalDirection {
     Inward,
     Outward,
 }
+#[derive(Debug)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
     pub iedges: Array<EdgeTypeAndIndex, Ix1>,
@@ -132,15 +134,12 @@ pub struct Element {
     pub jacob_det: f64,
     pub circumradius: f64,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EdgeTypeAndIndex {
     Boundary(usize),
     Internal(usize),
 }
-pub enum EdgeType<'a> {
-    Internal(&'a Edge),
-    Boundary(&'a BoundaryEdge),
-}
+#[derive(Debug)]
 pub struct Edge {
     pub ielements: [usize; 2],
     pub ivertices: [usize; 2],

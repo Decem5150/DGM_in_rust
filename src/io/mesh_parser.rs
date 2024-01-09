@@ -6,6 +6,7 @@ pub struct EdgeBlock {
     pub node_pairs: Vec<[usize; 2]>,
     pub physical_name: String,
 }
+#[derive(Debug)]
 pub struct ElementBlock {
     pub node_ids: Vec<[usize; 3]>,
 }

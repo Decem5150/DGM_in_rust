@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;
+#[derive(Debug)]
 pub struct DubinerBasis {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,

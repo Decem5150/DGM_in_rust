@@ -1,7 +1,7 @@
 use std::fs;
 use serde::Deserialize;
 use serde_json;
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct InitialSolution {
     pub density: f64,
     pub u: f64,

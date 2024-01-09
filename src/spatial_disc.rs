@@ -5,7 +5,6 @@ pub mod local_characteristics;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
 use ndarray::s;
-use self::boundary_condition::BoundaryCondition;
 use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::mesh::Mesh;
 use crate::solver::{FlowParameters, SolverParameters, MeshParameters};
@@ -15,7 +14,6 @@ pub enum InviscidFluxScheme {
 pub struct SpatialDisc<'a> {
     pub inviscid_flux_scheme: InviscidFluxScheme,
     // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
-    pub boundary_condition: BoundaryCondition,
     pub mesh: &'a Mesh,
     pub basis: &'a DubinerBasis,
     pub gauss_points: &'a GaussPoints,
@@ -27,7 +25,7 @@ impl<'a> SpatialDisc<'a> {
     pub fn compute_residuals(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         self.integrate_over_cell(residuals, solutions);
         self.integrate_over_edges(residuals, solutions);
-        self.boundary_condition.apply_bc(residuals, solutions, self.mesh, self.basis);
+        self.apply_bc(residuals, solutions);
         self.divide_residual_by_mass_mat_diag(residuals);
     }
     fn integrate_over_cell(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
