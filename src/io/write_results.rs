@@ -44,9 +44,9 @@ pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &D
         let y_velocity = y_momentum.iter().zip(&density).map(|(&y_momentum, &density)| y_momentum / density).collect::<Vec<f64>>();
         let velocity = x_velocity.iter().zip(&y_velocity).flat_map(|(&x_velocity, &y_velocity)| vec![x_velocity, y_velocity, 0.0]).collect::<Vec<f64>>();
         let pressure = energy.iter().zip(&density)
-        .zip(&x_velocity)
-        .zip(&y_velocity)
-        .map(|(((&energy, &density), &x_vel), &y_vel)| (flow_param.hcr - 1.0) * (energy - 0.5 * density * (x_vel.powi(2) + y_vel.powi(2)))).collect::<Vec<f64>>();
+            .zip(&x_velocity)
+            .zip(&y_velocity)
+            .map(|(((&energy, &density), &x_vel), &y_vel)| (flow_param.hcr - 1.0) * (energy - 0.5 * density * (x_vel.powi(2) + y_vel.powi(2)))).collect::<Vec<f64>>();
         let density_attribute = Attribute::DataArray(DataArray {
             name: "Density".to_string(),
             elem: ElementType::Scalars { num_comp: 1, lookup_table: None },
@@ -79,6 +79,6 @@ pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &D
         file_path: None,
         data: dataset,
     };
-    vtk.export_ascii("outputfiles/mesh.vtk")
-        .expect(&format!("Failed to save file: {:?}", "outputfiles/mesh.vtk"));
+    vtk.export_ascii("outputfiles/airfoil solution at step=10000.vtk")
+        .expect(&format!("Failed to save file: {:?}", "outputfiles/solution.vtk"));
 }

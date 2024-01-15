@@ -1,11 +1,11 @@
 {
     "mesh_file": "inputfiles/airfoil.msh",
-    "cfl" : 0.2,
-    "final_time": 5.0,
-    "number_of_cell_gp": 4,
-    "number_of_edge_gp": 3,
+    "cfl" : 0.4,
+    "final_time": 500.0,
+    "number_of_cell_gp": 6,
+    "number_of_edge_gp": 5,
     "number_of_equations": 4,
-    "number_of_basis_functions": 6,
+    "number_of_basis_functions": 3,
     "hcr": 1.4,
     "inviscid_flux_scheme": "HLLC",
     "time_scheme": "RK3"

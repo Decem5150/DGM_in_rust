@@ -8,5 +8,9 @@
         "./Cargo.toml",
         "./Cargo.toml"
     ],
-    "rust-analyzer.showUnlinkedFileNotification": false
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "julia.environmentPath": "/home/stake/DGM_in_rust",
+    "lldb.launch.initCommands": [
+        "command script import ${workspaceFolder}/.vscode/formatter.py"
+    ],
 }

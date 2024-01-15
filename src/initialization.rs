@@ -4,20 +4,25 @@ use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::io::boundary_condition_parser::FreeStreamCondition;
 use crate::io::mesh_parser::{EdgeBlock, ElementBlock, GmshParser};
 use crate::io::param_parser::Parameters;
-use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, NormalDirection, Mesh, BoundaryQuantity, self};
+use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, NormalDirection, Mesh, BoundaryQuantity};
 use crate::solver::{SolverParameters, Solver, FlowParameters, MeshParameters};
 use crate::spatial_disc::{InviscidFluxScheme, SpatialDisc};
 use crate::temporal_disc::{TimeScheme, TemperalDisc};
 pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints, FlowParameters, MeshParameters, SolverParameters) {
     let parameters = Parameters::parse();
-    let solver_parameters = SolverParameters {
-        cfl: parameters.cfl,
+    let mut solver_parameters = SolverParameters {
+        cfl: 0.0,
         final_time: parameters.final_time,
         number_of_cell_gp: parameters.number_of_cell_gp,
         number_of_edge_gp: parameters.number_of_edge_gp,
         number_of_equations: parameters.number_of_equations,
         number_of_basis_functions: parameters.number_of_basis_functions,
     };
+    solver_parameters.cfl = {
+        let p: f64 = 1.0;
+        1.0 / ((2.0 * p + 1.0) * (1.0 + 4.0 / (p + 2.0).powf(2.0)))
+    };
+    dbg!(&solver_parameters.cfl);
     let flow_parameters = FlowParameters {
         hcr: parameters.hcr,
     };
@@ -42,8 +47,11 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     };
     mesh.compute_jacob_det();
     mesh.compute_normal();
-    mesh.compute_mass_mat(&basis, &gauss_points, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
-    mesh.compute_circle_circumradius();
+    //mesh.compute_mass_mat(&basis, &gauss_points, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
+    mesh.compute_derivatives(&basis, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
+    mesh.compute_circumradius();
+    mesh.compute_minimum_height();
+    mesh.set_neighbours();
     (mesh, basis, gauss_points, flow_parameters, mesh_parameters, solver_parameters)
 }
 pub fn initialize_solver<'a>(mesh: &'a Mesh, basis: &'a DubinerBasis, gauss_points: &'a GaussPoints, flow_parameters: &'a FlowParameters, mesh_parameters: &'a MeshParameters, solver_parameters: &'a SolverParameters) -> Solver<'a> {
@@ -109,13 +117,7 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             let jacob_det = 0.0;
             let ielement = 0;
             let in_cell_index = 0;
-            let (node_1, node_2) = {
-                if ivertices[0] < ivertices[1] {
-                    (ivertices[0], ivertices[1])
-                } else {
-                    (ivertices[1], ivertices[0])
-                }
-            };
+            let (node_1, node_2) = (ivertices[0], ivertices[1]);
             boundary_edges_vec.push(BoundaryEdge {
                 ivertices,
                 normal,
@@ -140,7 +142,7 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             _ => panic!("Boundary type not implemented"),
         };
         let patch = Patch {
-            iedges: (start_index..end_index).collect(),
+            iedges: (start_index..=end_index).collect(),
             boundary_type,
             boundary_quantity: boundary_quantity,
         };
@@ -152,14 +154,11 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
         // create edges from connectivities of elements
         for &node_id in block.node_ids.iter() {
             let mut node_pairs = [[0, 0]; 3];
-            let create_ordered_pair = |x, y| {
-            if x < y { [x, y] } else { [y, x] }
-            };
             for i in 0..3 {
-                node_pairs[i] = create_ordered_pair(node_id[i], node_id[(i + 1) % 3]);
+                node_pairs[i] = [node_id[i], node_id[(i + 1) % 3]];
             }
             for node_pair in node_pairs.iter() {
-                if edge_map.get(node_pair).is_none() {
+                if edge_map.get(node_pair).is_none() && edge_map.get(&[node_pair[1], node_pair[0]]).is_none() {
                     let ivertices = *node_pair;
                     let normal = [0.0, 0.0];
                     let jacob_det = 0.0;
@@ -177,16 +176,16 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             }
         }
         // assign edges to elements
-        for &node_id in block.node_ids.iter() {
+        for node_id in block.node_ids.iter() {
             let mut node_pairs = [[0, 0]; 3];
             for i in 0..3 {
                 node_pairs[i] = [node_id[i], node_id[(i + 1) % 3]];
             }
-            let mut iverices = Vec::new();
+            let mut ivertices = Vec::new();
             let mut iedges = Vec::new();
             let mut normal_directions = Vec::new();
             for node_pair in node_pairs.iter() {
-                iverices.push(node_pair[0]);
+                ivertices.push(node_pair[0]);
                 // normal is outward if vertices of edges are in the same order as the vertices of the element
                 let mut normal_direction = NormalDirection::Outward;
                 let edge_type_and_index = edge_map.get(node_pair).or_else(|| {
@@ -199,8 +198,8 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 normal_directions.push(normal_direction);
             }
             // store the indices of the elements in the edges
-            for (in_cell_index, iedge) in iedges.iter().enumerate() {
-                match iedge {
+            for (in_cell_index, iedge_) in iedges.iter().enumerate() {
+                match iedge_ {
                     EdgeTypeAndIndex::Boundary(iedge) => {
                         boundary_edges_vec[*iedge].ielement = elements_vec.len();
                         boundary_edges_vec[*iedge].in_cell_index = in_cell_index;
@@ -220,27 +219,29 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 }
             }
             let is_internal_element = iedges.iter().all(|iedge| matches!(iedge, EdgeTypeAndIndex::Internal(_)));
-            let ivertices = Array::from(iverices);
+            let ivertices = Array::from(ivertices);
             let iedges = Array::from(iedges);
             let normal_directions = Array::from(normal_directions);
             let ineighbours = Array::from(vec![None; 3]);
             let ngp = solver_param.number_of_cell_gp;
             let nbasis = solver_param.number_of_basis_functions;
-            let mass_mat_diag = Array::zeros(nbasis);
+            //let mass_mat_diag = Array::zeros(nbasis);
             let derivatives: Array<HashMap<(usize, usize), f64>, _> = Array::from_shape_fn((ngp, nbasis), |_| {
                 HashMap::new()
             });
             let jacob_det = 0.0;
             let circumradius = 0.0;
+            let minimum_height = 0.0;
             elements_vec.push(Element {
                 ivertices,
                 iedges,
                 ineighbours,
-                mass_mat_diag,
+                //mass_mat_diag,
                 derivatives,
                 normal_directions,
                 jacob_det,
                 circumradius,
+                minimum_height,
             });
             if is_internal_element {
                 indices_internal_elements_vec.push(elements_vec.len() - 1);

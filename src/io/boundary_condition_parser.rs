@@ -3,7 +3,6 @@ use serde::Deserialize;
 use serde_json;
 #[derive(Deserialize)]
 pub struct FreeStreamCondition {
-    pub freestream_velocity: f64,
     pub angle_of_attack: f64,
     pub mach_number: f64,
     pub freestream_density: f64,

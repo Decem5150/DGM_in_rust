@@ -4,11 +4,8 @@ use crate::basis_function::DubinerBasis;
 use crate::basis_function::GaussPoints;
 use crate::io::initial_solution_parser::InitialSolution;
 use crate::mesh::Mesh;
-use crate::spatial_disc::InviscidFluxScheme;
 use crate::spatial_disc::SpatialDisc;
-use crate::temporal_disc;
 use crate::temporal_disc::TemperalDisc;
-use crate::temporal_disc::TimeScheme;
 pub struct SolverParameters {
     pub cfl: f64,
     pub final_time: f64,
@@ -46,12 +43,20 @@ pub struct Solver<'a> {
 impl<'a> Solver<'a> {
     pub fn set_initial_solution(&mut self) {
         let initial_solution = InitialSolution::parse();
-        let initial_q = [
-            initial_solution.density, 
-            initial_solution.density * initial_solution.u,
-            initial_solution.density * initial_solution.v,
-            initial_solution.pressure / (self.flow_param.hcr - 1.0) + 0.5 * initial_solution.density * (initial_solution.u.powi(2) + initial_solution.v.powi(2))
-            ];
+        let initial_q = {
+            let density = initial_solution.density;
+            let pressure = initial_solution.pressure;
+            let sound_speed = (self.flow_param.hcr * pressure / density).sqrt();
+            let x_velocity = initial_solution.x_mach_number * sound_speed;
+            let y_velocity = initial_solution.y_mach_number * sound_speed;
+            let total_energy = pressure / (self.flow_param.hcr - 1.0) + 0.5 * density * (x_velocity.powi(2) + y_velocity.powi(2));
+            [
+                density,
+                density * x_velocity,
+                density * y_velocity,
+                total_energy
+            ]
+        };
         for ielement in 0..self.mesh_param.number_of_elements {
             for ieq in 0..self.solver_param.number_of_equations {
                 for ibasis in 0..self.solver_param.number_of_basis_functions {
@@ -64,7 +69,7 @@ impl<'a> Solver<'a> {
         for ielement in 0..self.mesh_param.number_of_elements {
             for ieq in 0..self.solver_param.number_of_equations {
                 for ibasis in 0..self.solver_param.number_of_basis_functions {
-                    self.solutions[[ielement, ieq, ibasis]] /= self.mesh.elements[ielement].mass_mat_diag[ibasis];
+                    self.solutions[[ielement, ieq, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielement].jacob_det;
                 }
             }
         }

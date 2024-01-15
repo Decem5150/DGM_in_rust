@@ -1,9 +1,8 @@
 {
-    "freestream_velocity": 1.0,
     "angle_of_attack": 0.0,
     "mach_number": 0.5,
     "freestream_density": 1.0,
-    "freestream_pressure": 1.0,
+    "freestream_pressure": 100000.0,
     "freestream_temperature": 1.0,
     "hcr": 1.4
 }

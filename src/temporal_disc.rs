@@ -1,4 +1,5 @@
 pub mod rk3;
+pub mod euler_forward;
 use ndarray::{Array, Ix3};
 use crate::{solver::{FlowParameters, MeshParameters, SolverParameters}, mesh::Mesh, basis_function::{DubinerBasis, GaussPoints}, spatial_disc::SpatialDisc};
 pub enum TimeScheme {
@@ -18,17 +19,21 @@ pub struct TemperalDisc<'a> {
 }
 impl<'a> TemperalDisc<'a> {
     pub fn time_march(&mut self, spatial_disc: &SpatialDisc, residuals: &mut Array<f64, Ix3>, solutions: &mut Array<f64, Ix3>) {
-        let mut time_step = 1.0e10;
-        while self.current_time < self.solver_param.final_time {
+        //while self.current_time < self.solver_param.final_time
+        while self.current_step < 10000 {
+            let mut time_step = self.compute_time_step(solutions);
             if self.current_time + time_step > self.solver_param.final_time {
                 time_step = self.solver_param.final_time - self.current_time;
-            } else {
-                time_step = self.compute_time_step(solutions);
             }
+            /*
             match self.time_scheme {
                 TimeScheme::RK3 => self.rk3(spatial_disc, residuals, solutions, time_step),
             }
+            */
+            self.euler_forward(spatial_disc, residuals, solutions, time_step);
             self.current_time += time_step;
+            self.current_step += 1;
+            println!("Time step: {}, Time: {}", self.current_step, self.current_time);
         }
     }
     fn compute_time_step(&self, solutions: &mut Array<f64, Ix3>) -> f64 {
@@ -52,13 +57,14 @@ impl<'a> TemperalDisc<'a> {
             let v = rho_v / rho;
             let p = (hcr - 1.0) * (rho_e - 0.5 * rho * (u * u + v * v));
             let c = (hcr * p / rho).sqrt();
-            let speed = u + c;
-            let dx = self.mesh.elements[ielem].circumradius;
-            let dt = self.solver_param.cfl * dx / speed;
+            let speed = (u * u + v * v).sqrt() + c;
+            let dx = self.mesh.elements[ielem].minimum_height;
+            let dt = 0.5 * self.solver_param.cfl * dx / speed;
             if dt < time_step {
                 time_step = dt;
             }
         }
+        dbg!(&time_step);
         time_step
     }
     pub fn set_residual_to_zero(residuals: &mut Array<f64, Ix3>) {

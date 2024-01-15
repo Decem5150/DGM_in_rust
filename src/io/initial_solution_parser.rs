@@ -4,8 +4,8 @@ use serde_json;
 #[derive(Deserialize, Debug)]
 pub struct InitialSolution {
     pub density: f64,
-    pub u: f64,
-    pub v: f64,
+    pub x_mach_number: f64,
+    pub y_mach_number: f64,
     pub pressure: f64,
 }
 impl InitialSolution {

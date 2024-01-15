@@ -1,5 +1,5 @@
 use ndarray::{Array, stack, Axis};
-use ndarray::{Ix1, Ix2, Ix3};
+use ndarray::{Ix1, Ix2, Ix3, s};
 use ndarray::array;
 pub struct GaussPoints {
     pub cell_gp_number: usize,
@@ -15,13 +15,13 @@ impl GaussPoints {
         let (interval_points, edge_weights) = gauss_points_interval(edge_gp);
 
         let ip11 = interval_points.mapv(|x| (x + 1.0) / 2.0);
-        let ip12 = interval_points.mapv(|x| 0.0);
+        let ip12 = interval_points.mapv(|_| 0.0);
         let ip1 = stack(Axis(0), &[ip11.view(), ip12.view()]).unwrap().t().to_owned();
         let ip21 = interval_points.mapv(|x| (1.0 - x) / 2.0);
         let ip22 = interval_points.mapv(|x| (1.0 + x) / 2.0);
         let ip2 = stack(Axis(0), &[ip21.view(), ip22.view()]).unwrap().t().to_owned();
-        let ip31 = interval_points.mapv(|x| 0.0);
-        let ip32 = interval_points.mapv(|x| (x + 1.0) / 2.0);
+        let ip31 = interval_points.mapv(|_| 0.0);
+        let ip32 = interval_points.slice(s![..;-1]).mapv(|x| (x + 1.0) / 2.0);
         let ip3 = stack(Axis(0), &[ip31.view(), ip32.view()]).unwrap().t().to_owned();
         
         let edge_points = stack(Axis(0), &[ip1.view(), ip2.view(), ip3.view()]).unwrap();
@@ -62,8 +62,29 @@ pub fn gauss_points_interval(number_of_points: usize) -> (Array<f64, Ix1>, Array
 pub fn gauss_points_triangle(number_of_points: usize) -> (Array<f64, Ix2>, Array<f64, Ix1>) {
     let (gauss_points, gauss_weights) = match number_of_points {
         4 => {
-            let points = array![[0.33333333333, 0.33333333333], [0.2, 0.6], [0.2, 0.2], [0.6, 0.2]];
-            let weights = array![-0.28125, 0.26041666667, 0.26041666667, 0.26041666667];
+            //let points = array![[0.33333333333, 0.33333333333], [0.2, 0.6], [0.2, 0.2], [0.6, 0.2]];
+            //let weights = array![-0.28125, 0.26041666667, 0.26041666667, 0.26041666667];
+            let points = array![[1.0 / 3.0, 1.0 / 3.0], [2.0 / 15.0, 11.0 / 15.0], [2.0 / 15.0, 2.0 / 15.0], [11.0 / 15.0, 2.0 / 15.0]];
+            let weights = array![-27.0 / 96.0, 25.0 / 96.0, 25.0 / 96.0, 25.0 / 96.0];
+            (points, weights)
+        }
+        6 => {
+            let points = array![
+                [0.44594849091597, 0.44594849091597],
+                [0.44594849091597, 0.10810301816807],
+                [0.10810301816807, 0.44594849091597],
+                [0.09157621350977, 0.09157621350977],
+                [0.09157621350977, 0.81684757298046],
+                [0.81684757298046, 0.09157621350977]
+            ];
+            let weights = array![
+                0.22338158967801,
+                0.22338158967801,
+                0.22338158967801,
+                0.10995174365532,
+                0.10995174365532,
+                0.10995174365532
+            ];
             (points, weights)
         }
         _ => {
