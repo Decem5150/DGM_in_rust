@@ -1,6 +1,6 @@
 pub mod flux;
 pub mod boundary_condition;
-//pub mod limiter;
+pub mod limiter;
 pub mod local_characteristics;
 use ndarray::Array;
 use ndarray::{Ix2, Ix3};
@@ -9,7 +9,6 @@ use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::debug_utils::check_for_nan;
 use crate::mesh::Mesh;
 use crate::solver::{FlowParameters, SolverParameters, MeshParameters};
-use crate::spatial_disc::flux::flux;
 pub enum InviscidFluxScheme {
     HLLC,
 }

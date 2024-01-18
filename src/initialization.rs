@@ -19,7 +19,7 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
         number_of_basis_functions: parameters.number_of_basis_functions,
     };
     solver_parameters.cfl = {
-        let p: f64 = 1.0;
+        let p: f64 = 2.0;
         1.0 / ((2.0 * p + 1.0) * (1.0 + 4.0 / (p + 2.0).powf(2.0)))
     };
     dbg!(&solver_parameters.cfl);

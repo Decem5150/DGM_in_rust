@@ -1,7 +1,7 @@
 pub mod rk3;
 pub mod euler_forward;
-use ndarray::{Array, Ix3};
-use crate::{solver::{FlowParameters, MeshParameters, SolverParameters}, mesh::Mesh, basis_function::{DubinerBasis, GaussPoints}, spatial_disc::SpatialDisc};
+use ndarray::{Array, Ix1, Ix3};
+use crate::{basis_function::{DubinerBasis, GaussPoints}, debug_utils::write_to_csv, mesh::Mesh, solver::{FlowParameters, MeshParameters, SolverParameters}, spatial_disc::SpatialDisc};
 pub enum TimeScheme {
     RK3,
 }
@@ -20,7 +20,7 @@ pub struct TemperalDisc<'a> {
 impl<'a> TemperalDisc<'a> {
     pub fn time_march(&mut self, spatial_disc: &SpatialDisc, residuals: &mut Array<f64, Ix3>, solutions: &mut Array<f64, Ix3>) {
         //while self.current_time < self.solver_param.final_time
-        while self.current_step < 10000 {
+        while self.current_step < 8 {
             let mut time_step = self.compute_time_step(solutions);
             if self.current_time + time_step > self.solver_param.final_time {
                 time_step = self.solver_param.final_time - self.current_time;
@@ -33,6 +33,25 @@ impl<'a> TemperalDisc<'a> {
             self.euler_forward(spatial_disc, residuals, solutions, time_step);
             self.current_time += time_step;
             self.current_step += 1;
+            /*{
+                let pressures_at_troubled_interface = {
+                    let nbasis = self.solver_param.number_of_basis_functions;
+                    let ngp = self.solver_param.number_of_edge_gp;
+                    let neq = self.solver_param.number_of_equations;
+                    let mut pressures = Array::zeros(ngp);
+                    for igp in 0..ngp {
+                        let mut sum: Array<f64, Ix1> = Array::zeros(neq);
+                        for ivar in 0..neq {
+                            for ibasis in 0..nbasis {
+                                sum[ivar] += solutions[[5844, ivar, ibasis]] * self.basis.phis_edge_gps[[1, igp, ibasis]];
+                            }
+                        }
+                        pressures[igp] = (self.flow_param.hcr - 1.0) * (sum[3] - 0.5 * (sum[1] * sum[1] + sum[2] * sum[2]) / sum[0]);
+                    }
+                    pressures
+                };
+                write_to_csv(pressures_at_troubled_interface, self.current_step);
+            }*/
             println!("Time step: {}, Time: {}", self.current_step, self.current_time);
         }
     }
@@ -59,7 +78,7 @@ impl<'a> TemperalDisc<'a> {
             let c = (hcr * p / rho).sqrt();
             let speed = (u * u + v * v).sqrt() + c;
             let dx = self.mesh.elements[ielem].minimum_height;
-            let dt = 0.5 * self.solver_param.cfl * dx / speed;
+            let dt = self.solver_param.cfl * dx / speed;
             if dt < time_step {
                 time_step = dt;
             }

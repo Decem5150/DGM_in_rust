@@ -1,5 +1,5 @@
 {
-    "mesh_file": "inputfiles/airfoil.msh",
+    "mesh_file": "inputfiles/naca0012.msh",
     "cfl" : 0.4,
     "final_time": 500.0,
     "number_of_cell_gp": 6,

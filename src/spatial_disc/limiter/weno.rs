@@ -1,17 +1,14 @@
-use core::slice;
-
 use ndarray::{Ix1, Ix2, Ix3, s};
 use ndarray::{Array, ArrayView, ArrayViewMut};
-use crate::mesh::{Element, Edge, NormalDirection, EdgeType};
-use crate::spatial_disc::local_characteristics;
-use super::Limiter;
-impl<'a> Limiter<'a> {
-    pub fn kxrcf(&self, solutions: ArrayViewMut<f64, Ix3>, ielem: usize) -> bool {
-        let element = &self.mesh.elements[ielem];
+use crate::mesh::{Element, Edge, NormalDirection};
+use crate::spatial_disc::{local_characteristics, SpatialDisc};
+impl SpatialDisc<'_> {
+    pub fn modified_kxrcf(&self, solutions: &Array<f64, Ix3>) -> Vec<usize> {
         let nelem = self.solver_param.number_of_elements;
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
+        let total_energy_jump = Array::zeros(nelem);
         let mut indicator_density = 0.0;
         // let mut indicator_total_enthalpy = 0.0;
         let mut surface = 0.0;
@@ -60,7 +57,8 @@ impl<'a> Limiter<'a> {
         indicator_density = indicator_density.abs() / (h.powf(1.5) * surface * min_density);
         indicator_density > 1.0
     }
-    pub fn weno(&self, solutions: ArrayViewMut<f64, Ix3>) {
+    
+    pub fn weno(&self, solutions: &mut Array<f64, Ix3>) {
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let hcr = self.flow_param.hcr;
@@ -72,7 +70,7 @@ impl<'a> Limiter<'a> {
                 solutions.slice(s![self.mesh.elements[ielem].ineighbours[2], .., ..])
                 ];
             // let proj_pol = Array::zeros((3, 4, neq, nbasis));
-            if self.kxrcf(solutions, &self.mesh.elements[ielem]) {
+            if self.modified_kxrcfkxrcf(solutions, &self.mesh.elements[ielem]) {
                 for (i, &iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
                     let ineighbour = self.mesh.elements[ielem].ineighbours[i];
                     let nx = self.mesh.edges[iedge].normal[0];

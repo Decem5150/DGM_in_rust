@@ -99,7 +99,7 @@ impl DubinerBasis {
                 self.phis_edge_gps[[iedge, igp, 0]] = Self::dubiner_basis(0, 0, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 1]] = Self::dubiner_basis(0, 1, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 2]] = Self::dubiner_basis(1, 0, xi, eta);
-                /* 
+                /*
                 self.phis_edge_gps[[iedge, igp, 3]] = Self::dubiner_basis(0, 2, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 4]] = Self::dubiner_basis(1, 1, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 5]] = Self::dubiner_basis(2, 0, xi, eta);
