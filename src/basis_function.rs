@@ -82,11 +82,11 @@ impl DubinerBasis {
             self.phis_cell_gps[[i, 0]] = Self::dubiner_basis(0, 0, xi, eta);
             self.phis_cell_gps[[i, 1]] = Self::dubiner_basis(0, 1, xi, eta);
             self.phis_cell_gps[[i, 2]] = Self::dubiner_basis(1, 0, xi, eta);
-            /* 
+ 
             self.phis_cell_gps[[i, 3]] = Self::dubiner_basis(0, 2, xi, eta);
             self.phis_cell_gps[[i, 4]] = Self::dubiner_basis(1, 1, xi, eta);
             self.phis_cell_gps[[i, 5]] = Self::dubiner_basis(2, 0, xi, eta);
-            */
+
         }
     }
     fn compute_phi_edge(&mut self, gauss_points: &GaussPoints) {
@@ -99,11 +99,11 @@ impl DubinerBasis {
                 self.phis_edge_gps[[iedge, igp, 0]] = Self::dubiner_basis(0, 0, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 1]] = Self::dubiner_basis(0, 1, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 2]] = Self::dubiner_basis(1, 0, xi, eta);
-                /*
+
                 self.phis_edge_gps[[iedge, igp, 3]] = Self::dubiner_basis(0, 2, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 4]] = Self::dubiner_basis(1, 1, xi, eta);
                 self.phis_edge_gps[[iedge, igp, 5]] = Self::dubiner_basis(2, 0, xi, eta);
-                */
+
             }
         }
     }
@@ -128,7 +128,7 @@ impl DubinerBasis {
             self.derivatives[[i, 2]].insert((2, 0), 0.0);
             self.derivatives[[i, 2]].insert((1, 1), 0.0);
             self.derivatives[[i, 2]].insert((0, 2), 0.0);
-            /* 
+
             self.derivatives[[i, 3]].insert((1, 0), 48.0 * xi + 24.0 * eta - 24.0);
             self.derivatives[[i, 3]].insert((0, 1), 24.0 * xi + 8.0 * eta - 8.0);
             self.derivatives[[i, 3]].insert((2, 0), 48.0);
@@ -144,7 +144,7 @@ impl DubinerBasis {
             self.derivatives[[i, 5]].insert((2, 0), 0.0);
             self.derivatives[[i, 5]].insert((1, 1), 0.0);
             self.derivatives[[i, 5]].insert((0, 2), 20.0);
-            */
+
         }
     }
     fn compute_mass_mat(&mut self, gauss_points: &GaussPoints) {

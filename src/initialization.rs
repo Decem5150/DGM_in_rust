@@ -4,7 +4,7 @@ use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::io::boundary_condition_parser::FreeStreamCondition;
 use crate::io::mesh_parser::{EdgeBlock, ElementBlock, GmshParser};
 use crate::io::param_parser::Parameters;
-use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, NormalDirection, Mesh, BoundaryQuantity};
+use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, Mesh, BoundaryQuantity};
 use crate::solver::{SolverParameters, Solver, FlowParameters, MeshParameters};
 use crate::spatial_disc::{InviscidFluxScheme, SpatialDisc};
 use crate::temporal_disc::{TimeScheme, TemperalDisc};
@@ -17,9 +17,10 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
         number_of_edge_gp: parameters.number_of_edge_gp,
         number_of_equations: parameters.number_of_equations,
         number_of_basis_functions: parameters.number_of_basis_functions,
+        order_of_polynomials: parameters.order_of_polynomials,
     };
     solver_parameters.cfl = {
-        let p: f64 = 2.0;
+        let p = solver_parameters.order_of_polynomials as f64;
         1.0 / ((2.0 * p + 1.0) * (1.0 + 4.0 / (p + 2.0).powf(2.0)))
     };
     dbg!(&solver_parameters.cfl);
@@ -109,6 +110,19 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
     let free_stream_condition = FreeStreamCondition::parse();
     for block in boundary_edge_blocks.into_iter() {
         let physical_name = block.physical_name;
+        let (boundary_type, boundary_quantity) = match physical_name.to_lowercase().as_str() {
+            "wall" => (BoundaryType::Wall, None),
+            "farfield" => {
+                let sound_speed = (free_stream_condition.hcr * free_stream_condition.freestream_pressure / free_stream_condition.freestream_density).sqrt();
+                (BoundaryType::FarField, Some(BoundaryQuantity {
+                    rho: free_stream_condition.freestream_density,
+                    u: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.cos(),
+                    v: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.sin(),
+                    p: free_stream_condition.freestream_pressure,
+                }))
+            },
+            _ => panic!("Boundary type not implemented"),
+        };
         let start_index = boundary_edges_vec.len();
         boundary_edges_vec.reserve(block.node_pairs.len());
         for node_pair in block.node_pairs.into_iter() {
@@ -124,23 +138,11 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 jacob_det,
                 ielement,
                 in_cell_index,
+                boundary_type: boundary_type.clone(),
             });
             edge_map.insert([node_1, node_2], EdgeTypeAndIndex::Boundary(boundary_edges_vec.len() - 1));
         }
         let end_index = boundary_edges_vec.len() - 1;
-        let (boundary_type, boundary_quantity) = match physical_name.to_lowercase().as_str() {
-            "wall" => (BoundaryType::Wall, None),
-            "farfield" => {
-                let sound_speed = (free_stream_condition.hcr * free_stream_condition.freestream_pressure / free_stream_condition.freestream_density).sqrt();
-                (BoundaryType::FarField, Some(BoundaryQuantity {
-                    rho: free_stream_condition.freestream_density,
-                    u: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.cos(),
-                    v: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.sin(),
-                    p: free_stream_condition.freestream_pressure,
-                }))
-            },
-            _ => panic!("Boundary type not implemented"),
-        };
         let patch = Patch {
             iedges: (start_index..=end_index).collect(),
             boundary_type,
@@ -183,19 +185,14 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             }
             let mut ivertices = Vec::new();
             let mut iedges = Vec::new();
-            let mut normal_directions = Vec::new();
             for node_pair in node_pairs.iter() {
                 ivertices.push(node_pair[0]);
-                // normal is outward if vertices of edges are in the same order as the vertices of the element
-                let mut normal_direction = NormalDirection::Outward;
                 let edge_type_and_index = edge_map.get(node_pair).or_else(|| {
                     let mut swapped_node_pair = node_pair.clone();  // Swap only if the first get fails
                     swapped_node_pair.swap(0, 1);
-                    normal_direction = NormalDirection::Inward; // Change direction if swapped
                     edge_map.get(&swapped_node_pair)
                 }).unwrap();
                 iedges.push(edge_type_and_index.clone());
-                normal_directions.push(normal_direction);
             }
             // store the indices of the elements in the edges
             for (in_cell_index, iedge_) in iedges.iter().enumerate() {
@@ -205,15 +202,12 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                         boundary_edges_vec[*iedge].in_cell_index = in_cell_index;
                     },
                     EdgeTypeAndIndex::Internal(iedge) => {
-                        match normal_directions[in_cell_index] {
-                            NormalDirection::Inward => {
-                                edges_vec[*iedge].ielements[1] = elements_vec.len();
-                                edges_vec[*iedge].in_cell_indices[1] = in_cell_index;
-                            }
-                            NormalDirection::Outward => {
-                                edges_vec[*iedge].ielements[0] = elements_vec.len();
-                                edges_vec[*iedge].in_cell_indices[0] = in_cell_index;
-                            }
+                        if ivertices[in_cell_index] == edges_vec[*iedge].ivertices[0] {
+                            edges_vec[*iedge].ielements[0] = elements_vec.len();
+                            edges_vec[*iedge].in_cell_indices[0] = in_cell_index;
+                        } else {
+                            edges_vec[*iedge].ielements[1] = elements_vec.len();
+                            edges_vec[*iedge].in_cell_indices[1] = in_cell_index;
                         }
                     }
                 }
@@ -221,11 +215,9 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             let is_internal_element = iedges.iter().all(|iedge| matches!(iedge, EdgeTypeAndIndex::Internal(_)));
             let ivertices = Array::from(ivertices);
             let iedges = Array::from(iedges);
-            let normal_directions = Array::from(normal_directions);
             let ineighbours = Array::from(vec![None; 3]);
             let ngp = solver_param.number_of_cell_gp;
             let nbasis = solver_param.number_of_basis_functions;
-            //let mass_mat_diag = Array::zeros(nbasis);
             let derivatives: Array<HashMap<(usize, usize), f64>, _> = Array::from_shape_fn((ngp, nbasis), |_| {
                 HashMap::new()
             });
@@ -236,9 +228,7 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 ivertices,
                 iedges,
                 ineighbours,
-                //mass_mat_diag,
                 derivatives,
-                normal_directions,
                 jacob_det,
                 circumradius,
                 minimum_height,

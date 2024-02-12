@@ -20,7 +20,7 @@ pub struct TemperalDisc<'a> {
 impl<'a> TemperalDisc<'a> {
     pub fn time_march(&mut self, spatial_disc: &SpatialDisc, residuals: &mut Array<f64, Ix3>, solutions: &mut Array<f64, Ix3>) {
         //while self.current_time < self.solver_param.final_time
-        while self.current_step < 8 {
+        while self.current_step < 20 {
             let mut time_step = self.compute_time_step(solutions);
             if self.current_time + time_step > self.solver_param.final_time {
                 time_step = self.solver_param.final_time - self.current_time;

@@ -13,18 +13,6 @@ pub struct Mesh {
     pub patches: Array<Patch, Ix1>,
 }
 impl Mesh {
-    /* 
-    pub fn compute_mass_mat(&mut self, basis: &DubinerBasis, gauss_points: &GaussPoints, ngp: usize, nbasis: usize) {
-        for element in self.elements.iter_mut() {
-            element.mass_mat_diag.iter_mut().for_each (|mass| *mass = 0.0);
-            for ibasis in 0..nbasis {
-                for igp in 0..ngp {
-                    element.mass_mat_diag[ibasis] += gauss_points.cell_weights[igp] * basis.phis_cell_gps[[igp, ibasis]].powf(2.0) * 0.5 * element.jacob_det;
-                }
-            }
-        }
-    }
-    */
     pub fn compute_normal(&mut self) {
         for edge in self.edges.iter_mut() {
             let x1 = self.vertices[edge.ivertices[0]].x;
@@ -128,11 +116,16 @@ impl Mesh {
             let deta_dy = dx_dxi / element.jacob_det;
             for igp in 0..ngp {
                 for ibasis in 0..nbasis {
-                    let dphi_dxi = basis.derivatives[[igp, ibasis]].get(&(1, 0)).unwrap();
-                    let dphi_deta = basis.derivatives[[igp, ibasis]].get(&(0, 1)).unwrap();
+                    let dphi_dxi = *basis.derivatives[[igp, ibasis]].get(&(1, 0)).unwrap();
+                    let dphi_deta = *basis.derivatives[[igp, ibasis]].get(&(0, 1)).unwrap();
+                    let dphi_dxidxi = *basis.derivatives[[igp, ibasis]].get(&(2, 0)).unwrap();
+                    let dphi_dxideta = *basis.derivatives[[igp, ibasis]].get(&(1, 1)).unwrap();
+                    let dphi_detadeta = *basis.derivatives[[igp, ibasis]].get(&(0, 2)).unwrap();
                     element.derivatives[[igp, ibasis]].insert((1, 0), dxi_dx * dphi_dxi + deta_dx * dphi_deta);
                     element.derivatives[[igp, ibasis]].insert((0, 1), dxi_dy * dphi_dxi + deta_dy * dphi_deta);
-                    //element.derivatives[[igp, ibasis]].insert((2, 0), dxi_dx * basis.derivatives[[igp, ibasis]].get(&(2, 1)).unwrap() + deta_dx * basis.derivatives[[igp, ibasis]].get(&(0, 3)).unwrap());
+                    element.derivatives[[igp, ibasis]].insert((2, 0), dxi_dx.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dx * deta_dx * dphi_dxideta + deta_dx.powf(2.0) * dphi_detadeta);
+                    element.derivatives[[igp, ibasis]].insert((1, 1), dxi_dx * dxi_dy * dphi_dxidxi + (dxi_dx * deta_dy + deta_dx * dxi_dy) * dphi_dxideta + deta_dx * deta_dy * dphi_detadeta);
+                    element.derivatives[[igp, ibasis]].insert((0, 2), dxi_dy.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dy * deta_dy * dphi_dxideta + deta_dy.powf(2.0) * dphi_detadeta);
                 }
             }
         }
@@ -144,13 +137,10 @@ impl Mesh {
                     EdgeTypeAndIndex::Boundary(_) => (),
                     EdgeTypeAndIndex::Internal(iedge) => {
                         let edge = &self.edges[iedge];
-                        match element.normal_directions[in_cell_index] {
-                            NormalDirection::Inward => {
-                                element.ineighbours[in_cell_index] = Some(edge.ielements[0]);
-                            }
-                            NormalDirection::Outward => {
-                                element.ineighbours[in_cell_index] = Some(edge.ielements[1]);
-                            }
+                        if element.ivertices[in_cell_index] == edge.ivertices[0] {
+                            element.ineighbours[in_cell_index] = Some(edge.ielements[1]);
+                        } else {
+                            element.ineighbours[in_cell_index] = Some(edge.ielements[0]);
                         }
                     }
                 }
@@ -163,18 +153,11 @@ pub struct Vertex {
     pub y: f64,
 }
 #[derive(Debug)]
-pub enum NormalDirection {
-    Inward,
-    Outward,
-}
-#[derive(Debug)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
     pub iedges: Array<EdgeTypeAndIndex, Ix1>,
     pub ineighbours: Array<Option<usize>, Ix1>,
-    //pub mass_mat_diag: Array<f64, Ix1>,
     pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
-    pub normal_directions: Array<NormalDirection, Ix1>,
     pub jacob_det: f64,
     pub circumradius: f64,
     pub minimum_height: f64,
@@ -193,18 +176,19 @@ pub struct Edge {
     pub in_cell_indices: [usize; 2],
     //pub hcr: f64,
 }
-#[derive(Debug)]
+#[derive(Clone)]
+pub enum BoundaryType {
+    Wall,
+    FarField,
+}
 pub struct BoundaryEdge {
     pub ivertices: [usize; 2],
     pub ielement: usize,
     pub jacob_det: f64,
     pub normal: [f64; 2],
     pub in_cell_index: usize,
+    pub boundary_type: BoundaryType,
     //pub hcr: f64,
-}
-pub enum BoundaryType {
-    Wall,
-    FarField,
 }
 pub struct BoundaryQuantity {
     pub rho: f64,

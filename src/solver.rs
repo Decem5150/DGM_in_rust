@@ -13,6 +13,7 @@ pub struct SolverParameters {
     pub number_of_edge_gp: usize,
     pub number_of_equations: usize,
     pub number_of_basis_functions: usize,
+    pub order_of_polynomials: usize,
 }
 pub struct MeshParameters {
     pub number_of_elements: usize,

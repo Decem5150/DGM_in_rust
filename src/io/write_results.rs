@@ -79,6 +79,6 @@ pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &D
         file_path: None,
         data: dataset,
     };
-    vtk.export_ascii("outputfiles/airfoil solution at step=10000.vtk")
+    vtk.export_ascii("outputfiles/airfoil solution at step=10.vtk")
         .expect(&format!("Failed to save file: {:?}", "outputfiles/solution.vtk"));
 }

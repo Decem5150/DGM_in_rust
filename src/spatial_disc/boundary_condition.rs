@@ -1,7 +1,7 @@
 use ndarray::{Ix1, Ix2, Ix3};
 use ndarray::{Array, Axis};
 use ndarray::s;
-use crate::mesh::{BoundaryEdge, BoundaryType, Patch, NormalDirection};
+use crate::mesh::{BoundaryEdge, BoundaryType, Patch};
 use super::{local_characteristics, SpatialDisc};
 impl<'a> SpatialDisc<'a> {
     pub fn apply_bc(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
@@ -20,25 +20,19 @@ impl<'a> SpatialDisc<'a> {
         for &iedge in patch.iedges.iter() {
             let ielem = self.mesh.boundary_edges[iedge].ielement;
             let in_cell_index = self.mesh.boundary_edges[iedge].in_cell_index;
-            /* 
-            let nx = self.mesh.boundary_edges[iedge].normal[0];
-            let ny = self.mesh.boundary_edges[iedge].normal[1];
-            */
             let (nx, ny) = {
+                if self.mesh.elements[ielem].ivertices[in_cell_index] == self.mesh.boundary_edges[iedge].ivertices[0] {
+                    (self.mesh.boundary_edges[iedge].normal[0], self.mesh.boundary_edges[iedge].normal[1])
+                } else {
+                    (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1])
+                }
+                /* 
                 match self.mesh.elements[ielem].normal_directions[in_cell_index] {
                     NormalDirection::Inward => (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1]),
                     NormalDirection::Outward => (self.mesh.boundary_edges[iedge].normal[0], self.mesh.boundary_edges[iedge].normal[1]),
                 }
+                */
             };
-            /* 
-            let flag = {
-                if ielem == 2759 {
-                    2
-                } else {
-                    0
-                }
-            };
-            */
             let left_values_gps: Array<f64, Ix2> = self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions);
             for igp in 0..ngp {
                 let pressure = (hcr - 1.0) * (left_values_gps[[igp, 3]] - 0.5 * (left_values_gps[[igp, 1]] * left_values_gps[[igp, 1]] + left_values_gps[[igp, 2]] * left_values_gps[[igp, 2]]) / left_values_gps[[igp, 0]]);
@@ -47,16 +41,6 @@ impl<'a> SpatialDisc<'a> {
                     residuals[[ielem, 2, ibasis]] -= pressure * self.gauss_points.edge_weights[igp] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]] * ny * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
                 }
             }
-            /*
-            let residual_0 = residuals[[2759, 0, 0]]- residual0;
-            let residual_1 = residuals[[2759, 1, 0]] - residual1;
-            let residual_2 = residuals[[2759, 2, 0]] - residual2;
-            if flag == 2 {
-                dbg!(&residual_0);
-                dbg!(&residual_1);
-                dbg!(&residual_2);
-            }
-            */
         }
     }
     fn far_field(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>, patch: &Patch) {
@@ -75,9 +59,10 @@ impl<'a> SpatialDisc<'a> {
             let ielem = self.mesh.boundary_edges[iedge].ielement;
             let in_cell_index = self.mesh.boundary_edges[iedge].in_cell_index;
             let (nx, ny) = {
-                match self.mesh.elements[ielem].normal_directions[in_cell_index] {
-                    NormalDirection::Inward => (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1]),
-                    NormalDirection::Outward => (self.mesh.boundary_edges[iedge].normal[0], self.mesh.boundary_edges[iedge].normal[1]),
+                if self.mesh.elements[ielem].ivertices[in_cell_index] == self.mesh.boundary_edges[iedge].ivertices[0] {
+                    (self.mesh.boundary_edges[iedge].normal[0], self.mesh.boundary_edges[iedge].normal[1])
+                } else {
+                    (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1])
                 }
             };
             let left_values_gps: Array<f64, Ix2> = self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions);

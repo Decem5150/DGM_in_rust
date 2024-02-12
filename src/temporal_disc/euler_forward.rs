@@ -9,5 +9,6 @@ impl<'a> TemperalDisc<'a> {
         spatial_disc.compute_residuals(residuals, solutions);
         check_for_nan("residuals".to_string(), residuals);
         *solutions = &*solutions + time_step * &*residuals;
+        spatial_disc.apply_limiter(solutions);
     }
 }

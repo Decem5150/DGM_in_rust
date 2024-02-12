@@ -10,6 +10,7 @@ pub struct Parameters {
     pub number_of_edge_gp: usize,
     pub number_of_equations: usize,
     pub number_of_basis_functions: usize,
+    pub order_of_polynomials: usize,
     pub hcr: f64,
     pub inviscid_flux_scheme: String,
     pub time_scheme: String,
