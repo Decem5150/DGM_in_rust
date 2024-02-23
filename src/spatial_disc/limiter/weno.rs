@@ -87,7 +87,7 @@ impl SpatialDisc<'_> {
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let hcr = self.flow_param.hcr;
-        let linear_weights = [0.998, 0.002];
+        let linear_weights = [0.995, 0.005];
         for (ielem, element) in self.mesh.elements.indexed_iter() {
             let mut neighbour_area = 0.0;
             if self.modified_kxrcf(solutions, ielem) {

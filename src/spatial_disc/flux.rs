@@ -52,6 +52,8 @@ pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, n
     */
     let pl = (hcr - 1.0) * (ql[3] - 0.5 * (ql[1] * ql[1] + ql[2] * ql[2]) / ql[0]);
     let pr = (hcr - 1.0) * (qr[3] - 0.5 * (qr[1] * qr[1] + qr[2] * qr[2]) / qr[0]);
+    assert!(ql[0] > 0.0 && qr[0] > 0.0, "Negative density found in HLLC!");
+    assert!(pl > 0.0 && pr > 0.0, "Negative pressure found in HLLC!");
     let cl = (hcr * pl / ql[0]).sqrt();
     let cr = (hcr * pr / qr[0]).sqrt();
     let mut fl = [0.0f64; 4];
@@ -95,22 +97,12 @@ pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, n
         flux[1] = fl[1] * nx - fl[2] * ny;
         flux[2] = fl[1] * ny + fl[2] * nx;
         flux[3] = fl[3];
-        for &value in flux.iter() {
-            if value.is_nan() {
-                panic!("Found NaN value in num_flux!");
-            }
-        }
         flux
     } else if sr <= 0.0 {
         flux[0] = fr[0];
         flux[1] = fr[1] * nx - fr[2] * ny;
         flux[2] = fr[1] * ny + fr[2] * nx;
         flux[3] = fr[3];
-        for &value in flux.iter() {
-            if value.is_nan() {
-                panic!("Found NaN value in num_flux!");
-            }
-        }
         flux
     } else {
         let s_star = (pr - pl + ql[0] * ul * (sl - ul) - qr[0] * ur * (sr - ur)) / (ql[0] * (sl - ul) - qr[0] * (sr - ur));
@@ -128,11 +120,6 @@ pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, n
                 (flux_normal * nx - flux_tangent * ny, flux_normal * ny + flux_tangent * nx)
             };
             flux[3] = fl[3] + sl * (q_star[3] - ql[3]);
-            for &value in flux.iter() {
-                if value.is_nan() {
-                    panic!("Found NaN value in num_flux!");
-                }
-            }
             flux
         }
         else {
@@ -149,11 +136,6 @@ pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, n
                 (flux_normal * nx - flux_tangent * ny, flux_normal * ny + flux_tangent * nx)
             };
             flux[3] = fr[3] + sr * (q_star[3] - qr[3]);
-            for &value in flux.iter() {
-                if value.is_nan() {
-                    panic!("Found NaN value in num_flux!");
-                }
-            }
             flux
         }
     }

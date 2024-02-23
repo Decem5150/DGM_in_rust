@@ -1,7 +1,7 @@
 pub mod rk3;
 pub mod euler_forward;
-use ndarray::{Array, Ix1, Ix3};
-use crate::{basis_function::{DubinerBasis, GaussPoints}, debug_utils::write_to_csv, mesh::Mesh, solver::{FlowParameters, MeshParameters, SolverParameters}, spatial_disc::SpatialDisc};
+use ndarray::{Array, Ix3};
+use crate::{basis_function::{DubinerBasis, GaussPoints}, debug_utils::write_to_csv, io::write_results::write_to_vtk, mesh::Mesh, solver::{FlowParameters, MeshParameters, SolverParameters}, spatial_disc::SpatialDisc};
 pub enum TimeScheme {
     RK3,
 }
@@ -19,8 +19,7 @@ pub struct TemperalDisc<'a> {
 }
 impl<'a> TemperalDisc<'a> {
     pub fn time_march(&mut self, spatial_disc: &SpatialDisc, residuals: &mut Array<f64, Ix3>, solutions: &mut Array<f64, Ix3>) {
-        //while self.current_time < self.solver_param.final_time
-        while self.current_step < 20 {
+        while self.current_step < self.solver_param.final_step && self.current_time < self.solver_param.final_time {
             let mut time_step = self.compute_time_step(solutions);
             if self.current_time + time_step > self.solver_param.final_time {
                 time_step = self.solver_param.final_time - self.current_time;
@@ -30,7 +29,7 @@ impl<'a> TemperalDisc<'a> {
                 TimeScheme::RK3 => self.rk3(spatial_disc, residuals, solutions, time_step),
             }
             */
-            self.euler_forward(spatial_disc, residuals, solutions, time_step);
+            self.rk3(spatial_disc, residuals, solutions, time_step);
             self.current_time += time_step;
             self.current_step += 1;
             /*{
@@ -54,6 +53,7 @@ impl<'a> TemperalDisc<'a> {
             }*/
             println!("Time step: {}, Time: {}", self.current_step, self.current_time);
         }
+        write_to_vtk(solutions, self.mesh, self.basis, self.gauss_points, self.flow_param, self.mesh_param, self.solver_param, self.current_step);
     }
     fn compute_time_step(&self, solutions: &mut Array<f64, Ix3>) -> f64 {
         let nbasis = self.solver_param.number_of_basis_functions;

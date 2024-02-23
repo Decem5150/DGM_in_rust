@@ -6,6 +6,7 @@ pub struct Parameters {
     pub mesh_file: String,
     pub cfl: f64,
     pub final_time: f64,
+    pub final_step: usize,
     pub number_of_cell_gp: usize,
     pub number_of_edge_gp: usize,
     pub number_of_equations: usize,

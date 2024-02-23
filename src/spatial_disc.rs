@@ -13,7 +13,6 @@ pub enum InviscidFluxScheme {
     HLLC,
 }
 pub struct SpatialDisc<'a> {
-    pub inviscid_flux_scheme: InviscidFluxScheme,
     // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
     pub mesh: &'a Mesh,
     pub basis: &'a DubinerBasis,
@@ -25,17 +24,9 @@ pub struct SpatialDisc<'a> {
 impl<'a> SpatialDisc<'a> {
     pub fn compute_residuals(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         self.integrate_over_cell(residuals, solutions);
-        check_for_nan("residuals after integrate_over_cell".to_string(), &residuals);
-        //let residuals_after_cell_integration = residuals.clone();
-        //check_for_nan("solutions".to_string(), &solutions);
         self.integrate_over_edges(residuals, solutions);
-        check_for_nan("residuals after integrate_over_edges".to_string(), &residuals);
-        //dbg!(residuals.slice(s![2759, .., ..]));
         self.apply_bc(residuals, solutions);
-        //dbg!(residuals.slice(s![2759, .., ..]));
-        check_for_nan("residuals after apply_bc".to_string(), &residuals);
         self.divide_residual_by_mass_mat_diag(residuals);
-        check_for_nan("residuals after divide_residual_by_mass_mat_diag".to_string(), &residuals);
     }
     fn integrate_over_cell(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         let nbasis = self.solver_param.number_of_basis_functions;
@@ -102,7 +93,7 @@ impl<'a> SpatialDisc<'a> {
             }
             //check_for_nan("right_values_gps".to_string(), &right_values_gps);
             for igp in 0..ngp {
-                let num_flux = match self.inviscid_flux_scheme {
+                let num_flux = match self.solver_param.inviscid_flux_scheme {
                     InviscidFluxScheme::HLLC => flux::hllc(
                         left_values_gps.slice(s![igp, ..]), 
                         right_values_gps.slice(s![igp, ..]), 
@@ -117,8 +108,6 @@ impl<'a> SpatialDisc<'a> {
                     }
                 }
             }
-            //println!("iedge: {}", iedge);
-            check_for_nan("residuals".to_string(), &residuals);
         }
     }
     fn divide_residual_by_mass_mat_diag(&self, residuals: &mut Array<f64, Ix3>) {

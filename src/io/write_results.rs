@@ -1,9 +1,11 @@
 use ndarray::{Array, Ix3, s};
 use vtkio::{model::{VertexNumbers, Cells, CellType, DataSet, UnstructuredGridPiece, Attributes, Version, ByteOrder, DataArray, Attribute, ElementType}, IOBuffer, Vtk};
+use std::fs;
+use std::path::Path;
 
 use crate::{mesh::Mesh, basis_function::{DubinerBasis, GaussPoints}, solver::{FlowParameters, MeshParameters, SolverParameters}};
 
-pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &DubinerBasis, gauss_points: &GaussPoints, flow_param: &FlowParameters, mesh_param: &MeshParameters, solver_param: &SolverParameters) {
+pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &DubinerBasis, gauss_points: &GaussPoints, flow_param: &FlowParameters, mesh_param: &MeshParameters, solver_param: &SolverParameters, current_step: usize) {
     let points = IOBuffer::F64(mesh.vertices.iter().flat_map(|v| vec![v.x, v.y, 0.0]).collect());
     let cell_verts = VertexNumbers::XML {
         connectivity: mesh.elements.iter().flat_map(|elem| elem.ivertices.iter().map(|&index| index as u64)).collect(),
@@ -79,6 +81,13 @@ pub fn write_to_vtk(solutions: &Array<f64, Ix3>, mesh: &Mesh, basis_function: &D
         file_path: None,
         data: dataset,
     };
-    vtk.export_ascii("outputfiles/airfoil solution at step=10.vtk")
-        .expect(&format!("Failed to save file: {:?}", "outputfiles/solution.vtk"));
+    let outputs_path = "outputfiles/solutions";
+    if !Path::new(&outputs_path).exists() {
+        match fs::create_dir_all(outputs_path) {
+            Ok(_) => println!("outputfiles/solutions created successfully."),
+            Err(e) => println!("Failed to create folder: {}", e),
+        }
+    } else {}
+    vtk.export_ascii(&format!("outputfiles/solutions/step={:?}.vtk", current_step))
+        .expect(&format!("Failed to save solutions"));
 }

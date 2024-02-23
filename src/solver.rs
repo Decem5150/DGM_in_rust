@@ -4,16 +4,19 @@ use crate::basis_function::DubinerBasis;
 use crate::basis_function::GaussPoints;
 use crate::io::initial_solution_parser::InitialSolution;
 use crate::mesh::Mesh;
+use crate::spatial_disc::InviscidFluxScheme;
 use crate::spatial_disc::SpatialDisc;
 use crate::temporal_disc::TemperalDisc;
 pub struct SolverParameters {
     pub cfl: f64,
     pub final_time: f64,
+    pub final_step: usize,
     pub number_of_cell_gp: usize,
     pub number_of_edge_gp: usize,
     pub number_of_equations: usize,
     pub number_of_basis_functions: usize,
     pub order_of_polynomials: usize,
+    pub inviscid_flux_scheme: InviscidFluxScheme,
 }
 pub struct MeshParameters {
     pub number_of_elements: usize,

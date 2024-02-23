@@ -21,5 +21,4 @@ fn main() {
     dbg!(&mesh.edges[4743]);
     */
     solver.solve();
-    //write_to_vtk(&solver.solutions, &mesh, &basis_function, &gauss_points, &flow_param, &mesh_param, &solver_param);
 }

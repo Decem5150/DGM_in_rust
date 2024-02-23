@@ -13,11 +13,18 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     let mut solver_parameters = SolverParameters {
         cfl: 0.0,
         final_time: parameters.final_time,
+        final_step: parameters.final_step,
         number_of_cell_gp: parameters.number_of_cell_gp,
         number_of_edge_gp: parameters.number_of_edge_gp,
         number_of_equations: parameters.number_of_equations,
         number_of_basis_functions: parameters.number_of_basis_functions,
         order_of_polynomials: parameters.order_of_polynomials,
+        inviscid_flux_scheme: {
+            match parameters.inviscid_flux_scheme.to_lowercase().as_str() {
+                "hllc" => InviscidFluxScheme::HLLC,
+                _ => panic!("Inviscid flux scheme not implemented"),
+            }
+        }
     };
     solver_parameters.cfl = {
         let p = solver_parameters.order_of_polynomials as f64;
@@ -56,12 +63,10 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     (mesh, basis, gauss_points, flow_parameters, mesh_parameters, solver_parameters)
 }
 pub fn initialize_solver<'a>(mesh: &'a Mesh, basis: &'a DubinerBasis, gauss_points: &'a GaussPoints, flow_parameters: &'a FlowParameters, mesh_parameters: &'a MeshParameters, solver_parameters: &'a SolverParameters) -> Solver<'a> {
-    let inviscid_flux_scheme = InviscidFluxScheme::HLLC;
     let time_scheme = TimeScheme::RK3;
     let residuals = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, solver_parameters.number_of_basis_functions));
     let solutions = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, solver_parameters.number_of_basis_functions));
     let spatial_disc = SpatialDisc {
-        inviscid_flux_scheme,
         mesh: &mesh,
         basis: &basis,
         gauss_points: &gauss_points,
