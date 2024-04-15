@@ -1,3 +1,4 @@
+use ndarray::Array;
 use ndarray::Ix1;
 use ndarray::ArrayView;
 /*
@@ -24,7 +25,7 @@ pub fn hr_slau2(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1
     let chi = (1.0 - mach_tmp).powf(2.0);
 }
 */
-pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4] {
+pub fn hllc(left_value: &Array<f64, Ix1>, right_value: &Array<f64, Ix1>, normal: &[f64; 2], hcr: &f64) -> [f64; 4] {
     let mut flux = [0.0_f64; 4];
     let nx = normal[0];
     let ny = normal[1];
@@ -140,7 +141,7 @@ pub fn hllc(left_value: ArrayView<f64, Ix1>, right_value: ArrayView<f64, Ix1>, n
         }
     }
 }
-pub fn flux(q: ArrayView<f64, Ix1>, hcr: f64) -> ([f64; 4], [f64; 4]) {
+pub fn flux(q: &Array<f64, Ix1>, hcr: f64) -> ([f64; 4], [f64; 4]) {
     let mut f = [0.0f64; 4];
     let mut g = [0.0f64; 4];
     let u = q[1] / q[0];

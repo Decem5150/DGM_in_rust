@@ -7,7 +7,8 @@ pub struct DubinerBasis {
     pub dof: usize,
     pub phis_cell_gps: Array<f64, Ix2>,
     pub phis_edge_gps: Array<f64, Ix3>,
-    pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
+    pub dphis_cell_gps: Array<HashMap<(usize, usize), f64>, Ix2>,
+    pub dphis_edge_gps: Array<HashMap<(usize, usize), f64>, Ix3>,
     pub mass_mat_diag: Array<f64, Ix1>,
 }
 impl DubinerBasis {
@@ -16,18 +17,21 @@ impl DubinerBasis {
         let edge_gp_number = gauss_points.edge_gp_number;
         let phis_cell_gps = Array::zeros((gp_number, dof));
         let phis_edge_gps = Array::zeros((3, edge_gp_number, dof));
-        let derivatives: Array<HashMap<(usize, usize), f64>, Ix2> = Array::from_elem((gp_number, dof), HashMap::new());
+        let dphis_cell_gps: Array<HashMap<(usize, usize), f64>, Ix2> = Array::from_elem((gp_number, dof), HashMap::new());
+        let dphis_edge_gps: Array<HashMap<(usize, usize), f64>, Ix3> = Array::from_elem((3, edge_gp_number, dof), HashMap::new());
         let mass_mat_diag = Array::zeros(dof);
         let mut basis = DubinerBasis {
             dof,
             phis_cell_gps,
             phis_edge_gps,
-            derivatives,
+            dphis_cell_gps,
+            dphis_edge_gps,
             mass_mat_diag,
         };
         basis.compute_phi_cell(gauss_points);
         basis.compute_phi_edge(gauss_points);
-        basis.compute_derivatives(gauss_points);
+        basis.compute_dphi_cell(gauss_points);
+        basis.compute_dphi_edge(gauss_points);
         basis.compute_mass_mat(gauss_points);
         //basis.debug_basis(gauss_points);
         basis
@@ -107,44 +111,84 @@ impl DubinerBasis {
             }
         }
     }
-    fn compute_derivatives(&mut self, gauss_points: &GaussPoints) {
+    fn compute_dphi_cell(&mut self, gauss_points: &GaussPoints) {
         let ngp = gauss_points.cell_gp_number;
         let gauss_points = &gauss_points.cell_points;
         for i in 0..ngp {
             let xi = gauss_points[[i, 0]];
             let eta = gauss_points[[i, 1]];
-            self.derivatives[[i, 0]].insert((1, 0), 0.0);
-            self.derivatives[[i, 0]].insert((0, 1), 0.0);
-            self.derivatives[[i, 0]].insert((2, 0), 0.0);
-            self.derivatives[[i, 0]].insert((1, 1), 0.0);
-            self.derivatives[[i, 0]].insert((0, 2), 0.0);
-            self.derivatives[[i, 1]].insert((1, 0), 4.0);
-            self.derivatives[[i, 1]].insert((0, 1), 2.0);
-            self.derivatives[[i, 1]].insert((2, 0), 0.0);
-            self.derivatives[[i, 1]].insert((1, 1), 0.0);
-            self.derivatives[[i, 1]].insert((0, 2), 0.0);
-            self.derivatives[[i, 2]].insert((1, 0), 0.0);
-            self.derivatives[[i, 2]].insert((0, 1), 3.0);
-            self.derivatives[[i, 2]].insert((2, 0), 0.0);
-            self.derivatives[[i, 2]].insert((1, 1), 0.0);
-            self.derivatives[[i, 2]].insert((0, 2), 0.0);
+            self.dphis_cell_gps[[i, 0]].insert((1, 0), 0.0);
+            self.dphis_cell_gps[[i, 0]].insert((0, 1), 0.0);
+            self.dphis_cell_gps[[i, 0]].insert((2, 0), 0.0);
+            self.dphis_cell_gps[[i, 0]].insert((1, 1), 0.0);
+            self.dphis_cell_gps[[i, 0]].insert((0, 2), 0.0);
+            self.dphis_cell_gps[[i, 1]].insert((1, 0), 4.0);
+            self.dphis_cell_gps[[i, 1]].insert((0, 1), 2.0);
+            self.dphis_cell_gps[[i, 1]].insert((2, 0), 0.0);
+            self.dphis_cell_gps[[i, 1]].insert((1, 1), 0.0);
+            self.dphis_cell_gps[[i, 1]].insert((0, 2), 0.0);
+            self.dphis_cell_gps[[i, 2]].insert((1, 0), 0.0);
+            self.dphis_cell_gps[[i, 2]].insert((0, 1), 3.0);
+            self.dphis_cell_gps[[i, 2]].insert((2, 0), 0.0);
+            self.dphis_cell_gps[[i, 2]].insert((1, 1), 0.0);
+            self.dphis_cell_gps[[i, 2]].insert((0, 2), 0.0);
 
-            self.derivatives[[i, 3]].insert((1, 0), 48.0 * xi + 24.0 * eta - 24.0);
-            self.derivatives[[i, 3]].insert((0, 1), 24.0 * xi + 8.0 * eta - 8.0);
-            self.derivatives[[i, 3]].insert((2, 0), 48.0);
-            self.derivatives[[i, 3]].insert((1, 1), 24.0);
-            self.derivatives[[i, 3]].insert((0, 2), 8.0);
-            self.derivatives[[i, 4]].insert((1, 0), 20.0 * eta - 4.0);
-            self.derivatives[[i, 4]].insert((0, 1), 20.0 * xi + 20.0 * eta - 12.0);
-            self.derivatives[[i, 4]].insert((2, 0), 0.0);
-            self.derivatives[[i, 4]].insert((1, 1), 20.0);
-            self.derivatives[[i, 4]].insert((0, 2), 20.0);
-            self.derivatives[[i, 5]].insert((1, 0), 0.0);
-            self.derivatives[[i, 5]].insert((0, 1), 20.0 * eta - 8.0);
-            self.derivatives[[i, 5]].insert((2, 0), 0.0);
-            self.derivatives[[i, 5]].insert((1, 1), 0.0);
-            self.derivatives[[i, 5]].insert((0, 2), 20.0);
+            self.dphis_cell_gps[[i, 3]].insert((1, 0), 48.0 * xi + 24.0 * eta - 24.0);
+            self.dphis_cell_gps[[i, 3]].insert((0, 1), 24.0 * xi + 8.0 * eta - 8.0);
+            self.dphis_cell_gps[[i, 3]].insert((2, 0), 48.0);
+            self.dphis_cell_gps[[i, 3]].insert((1, 1), 24.0);
+            self.dphis_cell_gps[[i, 3]].insert((0, 2), 8.0);
+            self.dphis_cell_gps[[i, 4]].insert((1, 0), 20.0 * eta - 4.0);
+            self.dphis_cell_gps[[i, 4]].insert((0, 1), 20.0 * xi + 20.0 * eta - 12.0);
+            self.dphis_cell_gps[[i, 4]].insert((2, 0), 0.0);
+            self.dphis_cell_gps[[i, 4]].insert((1, 1), 20.0);
+            self.dphis_cell_gps[[i, 4]].insert((0, 2), 20.0);
+            self.dphis_cell_gps[[i, 5]].insert((1, 0), 0.0);
+            self.dphis_cell_gps[[i, 5]].insert((0, 1), 20.0 * eta - 8.0);
+            self.dphis_cell_gps[[i, 5]].insert((2, 0), 0.0);
+            self.dphis_cell_gps[[i, 5]].insert((1, 1), 0.0);
+            self.dphis_cell_gps[[i, 5]].insert((0, 2), 20.0);
+        }
+    }
+    fn compute_dphi_edge(&mut self, gauss_points: &GaussPoints) {
+        let ngp = gauss_points.edge_gp_number;
+        let gauss_points = &gauss_points.edge_points;
+        for iedge in 0..3 {
+            for igp in 0..ngp {
+                let xi = gauss_points[[iedge, igp, 0]];
+                let eta = gauss_points[[iedge, igp, 1]];
+                self.dphis_edge_gps[[iedge, igp, 0]].insert((1, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 0]].insert((0, 1), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 0]].insert((2, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 0]].insert((1, 1), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 0]].insert((0, 2), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 1]].insert((1, 0), 4.0);
+                self.dphis_edge_gps[[iedge, igp, 1]].insert((0, 1), 2.0);
+                self.dphis_edge_gps[[iedge, igp, 1]].insert((2, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 1]].insert((1, 1), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 1]].insert((0, 2), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 2]].insert((1, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 2]].insert((0, 1), 3.0);
+                self.dphis_edge_gps[[iedge, igp, 2]].insert((2, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 2]].insert((1, 1), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 2]].insert((0, 2), 0.0);
 
+                self.dphis_edge_gps[[iedge, igp, 3]].insert((1, 0), 48.0 * xi + 24.0 * eta - 24.0);
+                self.dphis_edge_gps[[iedge, igp, 3]].insert((0, 1), 24.0 * xi + 8.0 * eta - 8.0);
+                self.dphis_edge_gps[[iedge, igp, 3]].insert((2, 0), 48.0);
+                self.dphis_edge_gps[[iedge, igp, 3]].insert((1, 1), 24.0);
+                self.dphis_edge_gps[[iedge, igp, 3]].insert((0, 2), 8.0);
+                self.dphis_edge_gps[[iedge, igp, 4]].insert((1, 0), 20.0 * eta - 4.0);
+                self.dphis_edge_gps[[iedge, igp, 4]].insert((0, 1), 20.0 * xi + 20.0 * eta - 12.0);
+                self.dphis_edge_gps[[iedge, igp, 4]].insert((2, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 4]].insert((1, 1), 20.0);
+                self.dphis_edge_gps[[iedge, igp, 4]].insert((0, 2), 20.0);
+                self.dphis_edge_gps[[iedge, igp, 5]].insert((1, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 5]].insert((0, 1), 20.0 * eta - 8.0);
+                self.dphis_edge_gps[[iedge, igp, 5]].insert((2, 0), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 5]].insert((1, 1), 0.0);
+                self.dphis_edge_gps[[iedge, igp, 5]].insert((0, 2), 20.0);
+            }
         }
     }
     fn compute_mass_mat(&mut self, gauss_points: &GaussPoints) {

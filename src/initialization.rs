@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use ndarray::{Array, Ix1};
+use ndarray::{Array, Ix1, Ix2, Ix3};
 use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::io::boundary_condition_parser::FreeStreamCondition;
 use crate::io::mesh_parser::{EdgeBlock, ElementBlock, GmshParser};
 use crate::io::param_parser::Parameters;
-use crate::mesh::{BoundaryEdge, BoundaryType, Vertex, Edge, EdgeTypeAndIndex, Element, Patch, Mesh, BoundaryQuantity};
+use crate::mesh::{BoundaryType, Vertex, Edge, Element, Patch, Mesh, BoundaryQuantity};
 use crate::solver::{SolverParameters, Solver, FlowParameters, MeshParameters};
 use crate::spatial_disc::{InviscidFluxScheme, SpatialDisc};
 use crate::temporal_disc::{TimeScheme, TemperalDisc};
@@ -33,11 +33,13 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     dbg!(&solver_parameters.cfl);
     let flow_parameters = FlowParameters {
         hcr: parameters.hcr,
+        prandtl_number: parameters.prandtl_number, 
+        gas_constant: parameters.gas_constant,
     };
     let gauss_points = GaussPoints::new(solver_parameters.number_of_cell_gp, solver_parameters.number_of_edge_gp);
     let basis = DubinerBasis::new(solver_parameters.number_of_basis_functions, &gauss_points);
     let (vertices_vec, boundary_edge_blocks, element_blocks) = GmshParser::parse(parameters.mesh_file.clone());
-    let (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements) = process_mesh(&solver_parameters, vertices_vec, boundary_edge_blocks, element_blocks);
+    let (vertices, edges, elements, patches, internal_edge_indices, internal_element_indices, boundary_element_indices) = process_mesh(&solver_parameters, vertices_vec, boundary_edge_blocks, element_blocks);
     let mesh_parameters = MeshParameters {
         number_of_elements: elements.len(),
         number_of_edges: edges.len(),
@@ -47,16 +49,16 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     let mut mesh = Mesh {
         vertices,
         edges,
-        boundary_edges,
         elements,
         patches,
-        indices_internal_elements,
-        indices_boundary_elements,
+        internal_edge_indices,
+        internal_element_indices,
+        boundary_element_indices,
     };
     mesh.compute_jacob_det();
     mesh.compute_normal();
     //mesh.compute_mass_mat(&basis, &gauss_points, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
-    mesh.compute_derivatives(&basis, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
+    mesh.compute_dphi(&basis, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
     mesh.compute_circumradius();
     mesh.compute_minimum_height();
     mesh.set_neighbours();
@@ -66,7 +68,9 @@ pub fn initialize_solver<'a>(mesh: &'a Mesh, basis: &'a DubinerBasis, gauss_poin
     let time_scheme = TimeScheme::RK3;
     let residuals = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, solver_parameters.number_of_basis_functions));
     let solutions = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, solver_parameters.number_of_basis_functions));
+    let aux_vars = Array::zeros((mesh_parameters.number_of_elements, solver_parameters.number_of_equations, 2, solver_parameters.number_of_basis_functions));
     let spatial_disc = SpatialDisc {
+        aux_vars,
         mesh: &mesh,
         basis: &basis,
         gauss_points: &gauss_points,
@@ -104,12 +108,12 @@ pub fn initialize_solver<'a>(mesh: &'a Mesh, basis: &'a DubinerBasis, gauss_poin
     };
     solver
 }
-pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, boundary_edge_blocks: Vec<EdgeBlock>, element_blocks: Vec<ElementBlock>) -> (Array<Vertex, Ix1>, Array<Edge, Ix1>, Array<BoundaryEdge, Ix1>, Array<Element, Ix1>, Array<Patch, Ix1>, Array<usize, Ix1>, Array<usize, Ix1>) {
-    let mut boundary_edges_vec = Vec::new();
+pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, boundary_edge_blocks: Vec<EdgeBlock>, element_blocks: Vec<ElementBlock>) -> (Array<Vertex, Ix1>, Array<Edge, Ix1>, Array<Element, Ix1>, Array<Patch, Ix1>, Array<usize, Ix1>, Array<usize, Ix1>, Array<usize, Ix1>) {
     let mut edges_vec = Vec::new();
     let mut elements_vec = Vec::new();
     let mut patches_vec = Vec::new();
-    let mut edge_map: HashMap<[usize; 2], EdgeTypeAndIndex> = HashMap::new();
+    let mut edge_map: HashMap<[usize; 2], usize> = HashMap::new();
+    let mut indices_internal_edges_vec = Vec::new();
     let mut indices_internal_elements_vec = Vec::new();
     let mut indices_boundary_elements_vec = Vec::new();
     let free_stream_condition = FreeStreamCondition::parse();
@@ -128,30 +132,30 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             },
             _ => panic!("Boundary type not implemented"),
         };
-        let start_index = boundary_edges_vec.len();
-        boundary_edges_vec.reserve(block.node_pairs.len());
+        let start_index = edges_vec.len();
+        edges_vec.reserve(block.node_pairs.len());
         for node_pair in block.node_pairs.into_iter() {
             let ivertices = node_pair;
             let normal = [0.0, 0.0];
             let jacob_det = 0.0;
-            let ielement = 0;
-            let in_cell_index = 0;
+            let ielements = [0, -1];
+            let in_cell_indices = [0, -1];
             let (node_1, node_2) = (ivertices[0], ivertices[1]);
-            boundary_edges_vec.push(BoundaryEdge {
+            edges_vec.push(Edge {
                 ivertices,
                 normal,
                 jacob_det,
-                ielement,
-                in_cell_index,
-                boundary_type: boundary_type.clone(),
+                ielements,
+                in_cell_indices,
+                ipatch: patches_vec.len() as isize,
             });
-            edge_map.insert([node_1, node_2], EdgeTypeAndIndex::Boundary(boundary_edges_vec.len() - 1));
+            edge_map.insert([node_1, node_2], edges_vec.len() - 1);
         }
-        let end_index = boundary_edges_vec.len() - 1;
+        let end_index = edges_vec.len() - 1;
         let patch = Patch {
             iedges: (start_index..=end_index).collect(),
             boundary_type,
-            boundary_quantity: boundary_quantity,
+            boundary_quantity,
         };
         patches_vec.push(patch);
     }
@@ -171,14 +175,17 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                     let jacob_det = 0.0;
                     let ielements = [0, 0];
                     let in_cell_indices = [0, 0];
+                    let ipatch = -1;
                     edges_vec.push(Edge {
                         ivertices,
                         normal,
                         jacob_det,
                         ielements,
                         in_cell_indices,
+                        ipatch,
                     });
-                    edge_map.insert(*node_pair, EdgeTypeAndIndex::Internal(edges_vec.len() - 1));
+                    indices_internal_edges_vec.push(edges_vec.len() - 1);
+                    edge_map.insert(*node_pair, edges_vec.len() - 1);
                 }
             }
         }
@@ -190,42 +197,38 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
             }
             let mut ivertices = Vec::new();
             let mut iedges = Vec::new();
+            let mut is_internal_element = true;
             for node_pair in node_pairs.iter() {
                 ivertices.push(node_pair[0]);
-                let edge_type_and_index = edge_map.get(node_pair).or_else(|| {
+                let iedge = edge_map.get(node_pair).or_else(|| {
                     let mut swapped_node_pair = node_pair.clone();  // Swap only if the first get fails
                     swapped_node_pair.swap(0, 1);
                     edge_map.get(&swapped_node_pair)
                 }).unwrap();
-                iedges.push(edge_type_and_index.clone());
+                iedges.push(iedge.clone());
             }
             // store the indices of the elements in the edges
-            for (in_cell_index, iedge_) in iedges.iter().enumerate() {
-                match iedge_ {
-                    EdgeTypeAndIndex::Boundary(iedge) => {
-                        boundary_edges_vec[*iedge].ielement = elements_vec.len();
-                        boundary_edges_vec[*iedge].in_cell_index = in_cell_index;
-                    },
-                    EdgeTypeAndIndex::Internal(iedge) => {
-                        if ivertices[in_cell_index] == edges_vec[*iedge].ivertices[0] {
-                            edges_vec[*iedge].ielements[0] = elements_vec.len();
-                            edges_vec[*iedge].in_cell_indices[0] = in_cell_index;
-                        } else {
-                            edges_vec[*iedge].ielements[1] = elements_vec.len();
-                            edges_vec[*iedge].in_cell_indices[1] = in_cell_index;
-                        }
-                    }
+            for (in_cell_index, iedge) in iedges.iter().enumerate() {
+                if edges_vec[*iedge].ielements[1] == -1 {
+                    edges_vec[*iedge].ielements[0] = elements_vec.len() as isize;
+                    edges_vec[*iedge].in_cell_indices[0] = in_cell_index as isize;
+                    is_internal_element = false;
+                }
+                else if ivertices[in_cell_index] == edges_vec[*iedge].ivertices[0] {
+                    edges_vec[*iedge].ielements[0] = elements_vec.len() as isize;
+                    edges_vec[*iedge].in_cell_indices[0] = in_cell_index as isize;
+                } else {
+                    edges_vec[*iedge].ielements[1] = elements_vec.len() as isize;
+                    edges_vec[*iedge].in_cell_indices[1] = in_cell_index as isize;
                 }
             }
-            let is_internal_element = iedges.iter().all(|iedge| matches!(iedge, EdgeTypeAndIndex::Internal(_)));
             let ivertices = Array::from(ivertices);
             let iedges = Array::from(iedges);
-            let ineighbours = Array::from(vec![None; 3]);
+            let ineighbours = Array::from(vec![-1; 3]);
             let ngp = solver_param.number_of_cell_gp;
             let nbasis = solver_param.number_of_basis_functions;
-            let derivatives: Array<HashMap<(usize, usize), f64>, _> = Array::from_shape_fn((ngp, nbasis), |_| {
-                HashMap::new()
-            });
+            let dphis_cell_gps: Array<HashMap<(usize, usize), f64>, Ix2> = Array::from_elem((ngp, nbasis), HashMap::new());
+            let dphis_edge_gps: Array<HashMap<(usize, usize), f64>, Ix3> = Array::from_elem((3, ngp, nbasis), HashMap::new());
             let jacob_det = 0.0;
             let circumradius = 0.0;
             let minimum_height = 0.0;
@@ -233,7 +236,8 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 ivertices,
                 iedges,
                 ineighbours,
-                derivatives,
+                dphis_cell_gps,
+                dphis_edge_gps,
                 jacob_det,
                 circumradius,
                 minimum_height,
@@ -247,10 +251,10 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
     }
     let vertices = Array::from(vertices_vec);
     let edges = Array::from(edges_vec);
-    let boundary_edges = Array::from(boundary_edges_vec);
     let elements = Array::from(elements_vec);
     let patches = Array::from(patches_vec);
+    let indices_internal_edges = Array::from(indices_internal_edges_vec);
     let indices_internal_elements = Array::from(indices_internal_elements_vec);
     let indices_boundary_elements = Array::from(indices_boundary_elements_vec);
-    (vertices, edges, boundary_edges, elements, patches, indices_internal_elements, indices_boundary_elements)
+    (vertices, edges, elements, patches, indices_internal_edges, indices_internal_elements, indices_boundary_elements)
 }

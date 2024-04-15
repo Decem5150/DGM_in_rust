@@ -14,65 +14,67 @@ impl SpatialDisc<'_> {
         let mut surface = 0.0;
         let mut min_density = 1.0e10;
         let mut min_total_energy = 1.0e10;
-        for (in_cell_index, edge_type_and_index) in element.iedges.indexed_iter() {
-            match edge_type_and_index {
-                EdgeTypeAndIndex::Internal(iedge) => {
-                    let edge = &self.mesh.edges[*iedge];
-                    let ineighbour = element.ineighbours[in_cell_index].unwrap();
-                    let (nx, ny, neighbour_in_cell_index) = {
-                        if element.ivertices[in_cell_index] == edge.ivertices[0] {
-                            (edge.normal[0], edge.normal[1], edge.in_cell_indices[0])
-                        } else {
-                            (-edge.normal[0], -edge.normal[1], edge.in_cell_indices[1])
-                        }
-                    };
-                    for igp in 0..ngp {
-                        let mut rho = 0.0;
-                        let mut rho_e = 0.0;
-                        for ibasis in 0..nbasis {
-                            rho += solutions[[ielem, 0, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
-                            rho_e += solutions[[ielem, 3, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
-                        }
-                        if rho < min_density {
-                            min_density = rho;
-                        }
-                        if rho_e < min_total_energy {
-                            min_total_energy = rho_e;
-                        } 
+        for (in_cell_index, iedge) in element.iedges.indexed_iter() {
+            //match edge_type_and_index {
+            let edge = &self.mesh.edges[*iedge];
+            if edge.ielements[1] != -1 {
+                let edge = &self.mesh.edges[*iedge];
+                let ineighbour = element.ineighbours[in_cell_index] as usize;
+                let (nx, ny, neighbour_in_cell_index) = {
+                    if element.ivertices[in_cell_index] == edge.ivertices[0] {
+                        (edge.normal[0], edge.normal[1], edge.in_cell_indices[0] as usize)
+                    } else {
+                        (-edge.normal[0], -edge.normal[1], edge.in_cell_indices[1] as usize)
                     }
-                    let center_rho_velocity = {
-                        let center_gp_index = ngp / 2;
-                        let mut rho_u = 0.0;
-                        let mut rho_v = 0.0;
-                        for ibasis in 0..nbasis {
-                            rho_u += solutions[[ielem, 1, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, center_gp_index, ibasis]];
-                            rho_v += solutions[[ielem, 2, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, center_gp_index, ibasis]];
-                        }
-                        rho_u * nx + rho_v * ny
-                    };
-                    if center_rho_velocity < 0.0 {
-                        let mut rho_jump = 0.0;
-                        let mut rho_e_jump = 0.0;  
-                        for igp in 0..ngp {
-                            let mut int_rho_gp = 0.0;
-                            let mut int_rho_e_gp = 0.0;
-                            let mut ext_rho_gp = 0.0;
-                            let mut ext_rho_e_gp = 0.0;
-                            for ibasis in 0..nbasis {
-                                int_rho_gp += solutions[[ielem, 0, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
-                                int_rho_e_gp += solutions[[ielem, 3, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
-                                ext_rho_gp += solutions[[ineighbour, 0, ibasis]] * self.basis.phis_edge_gps[[neighbour_in_cell_index, ngp - 1 - igp, ibasis]];
-                                ext_rho_e_gp += solutions[[ineighbour, 3, ibasis]] * self.basis.phis_edge_gps[[neighbour_in_cell_index, ngp - 1 - igp, ibasis]];
-                            }
-                            rho_jump += 0.5 * edge.jacob_det * self.gauss_points.edge_weights[igp] * (int_rho_gp - ext_rho_gp);
-                            rho_e_jump += 0.5 * edge.jacob_det * self.gauss_points.edge_weights[igp] * (int_rho_e_gp - ext_rho_e_gp);
-                        }
-                        density_jump += rho_jump;
-                        total_energy_jump += rho_e_jump;
-                        surface += edge.jacob_det;
+                };
+                for igp in 0..ngp {
+                    let mut rho = 0.0;
+                    let mut rho_e = 0.0;
+                    for ibasis in 0..nbasis {
+                        rho += solutions[[ielem, 0, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
+                        rho_e += solutions[[ielem, 3, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
                     }
+                    if rho < min_density {
+                        min_density = rho;
+                    }
+                    if rho_e < min_total_energy {
+                        min_total_energy = rho_e;
+                    } 
                 }
-                EdgeTypeAndIndex::Boundary(_) => {},
+                let center_rho_velocity = {
+                    let center_gp_index = ngp / 2;
+                    let mut rho_u = 0.0;
+                    let mut rho_v = 0.0;
+                    for ibasis in 0..nbasis {
+                        rho_u += solutions[[ielem, 1, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, center_gp_index, ibasis]];
+                        rho_v += solutions[[ielem, 2, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, center_gp_index, ibasis]];
+                    }
+                    rho_u * nx + rho_v * ny
+                };
+                if center_rho_velocity < 0.0 {
+                    let mut rho_jump = 0.0;
+                    let mut rho_e_jump = 0.0;  
+                    for igp in 0..ngp {
+                        let mut int_rho_gp = 0.0;
+                        let mut int_rho_e_gp = 0.0;
+                        let mut ext_rho_gp = 0.0;
+                        let mut ext_rho_e_gp = 0.0;
+                        for ibasis in 0..nbasis {
+                            int_rho_gp += solutions[[ielem, 0, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
+                            int_rho_e_gp += solutions[[ielem, 3, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
+                            ext_rho_gp += solutions[[ineighbour, 0, ibasis]] * self.basis.phis_edge_gps[[neighbour_in_cell_index, ngp - 1 - igp, ibasis]];
+                            ext_rho_e_gp += solutions[[ineighbour, 3, ibasis]] * self.basis.phis_edge_gps[[neighbour_in_cell_index, ngp - 1 - igp, ibasis]];
+                        }
+                        rho_jump += 0.5 * edge.jacob_det * self.gauss_points.edge_weights[igp] * (int_rho_gp - ext_rho_gp);
+                        rho_e_jump += 0.5 * edge.jacob_det * self.gauss_points.edge_weights[igp] * (int_rho_e_gp - ext_rho_e_gp);
+                    }
+                    density_jump += rho_jump;
+                    total_energy_jump += rho_e_jump;
+                    surface += edge.jacob_det;
+                }
+                else {
+                    continue;
+                }
             }
         }
         let h = element.circumradius;
@@ -93,66 +95,68 @@ impl SpatialDisc<'_> {
             if self.modified_kxrcf(solutions, ielem) {
                 //dbg!(&ielem);
                 let mut reconstructed_pol: Array<f64, Ix2> = Array::zeros((neq, nbasis));
-                for (i, edge_type_and_index) in self.mesh.elements[ielem].iedges.indexed_iter() {
-                    match edge_type_and_index {
-                        EdgeTypeAndIndex::Internal(iedge) => {
-                            let ineighbour = self.mesh.elements[ielem].ineighbours[i].unwrap();
-                            neighbour_area += self.mesh.elements[ineighbour].jacob_det * 0.5;
-                            let tgt_pol = solutions.slice(s![ielem, .., ..]);
-                            let average_modified_nb_pol = {
-                                let mut nb_pol = solutions.slice(s![ineighbour, .., ..]).to_owned();
-                                for ivar in 0..neq {
-                                    nb_pol[[ivar, 0]] = tgt_pol[[ivar, 0]];
-                                }
-                                nb_pol
-                            };
-                            let nx = self.mesh.edges[*iedge].normal[0];
-                            let ny = self.mesh.edges[*iedge].normal[1];
-                            let (lmatrix, rmatrix) = local_characteristics::compute_eigenmatrix(solutions.slice(s![ielem, .., 0]), nx, ny, hcr);
-                            let proj_tgt_pol: Array<f64, Ix2> = lmatrix.dot(&tgt_pol);
-                            let proj_nb_pol: Array<f64, Ix2> = lmatrix.dot(&average_modified_nb_pol);
-                            let proj_pols: [Array<f64, Ix2>; 2] = [proj_tgt_pol, proj_nb_pol];
-                            let mut nonlinear_weights = [0.0; 2];
-                            {
-                                let mut beta = [0.0; 2];
-                                let k = self.solver_param.order_of_polynomials;
-                                for (i, proj_pol) in proj_pols.iter().enumerate() {
-                                    for l in 1..=k {
-                                        for l_1 in 0..=l {
-                                            let l_2 = l - l_1;
-                                            let mut integral = 0.0;
-                                            for (igp, cell_weight) in self.gauss_points.cell_weights.indexed_iter() {
-                                                for ((_, ibasis), proj_pol_value) in proj_pol.indexed_iter() {
-                                                    integral += 0.5 * element.jacob_det * cell_weight 
-                                                        * (1.0 / Self::factorial(l) * proj_pol_value
+                for (i, iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
+                    //match edge_type_and_index {
+                    let edge = &self.mesh.edges[*iedge];
+                    if edge.ielements[1] != -1 {
+                        let ineighbour = self.mesh.elements[ielem].ineighbours[i] as usize;
+                        neighbour_area += self.mesh.elements[ineighbour].jacob_det * 0.5;
+                        let tgt_pol = solutions.slice(s![ielem, .., ..]);
+                        let average_modified_nb_pol = {
+                            let mut nb_pol = solutions.slice(s![ineighbour, .., ..]).to_owned();
+                            for ivar in 0..neq {
+                                nb_pol[[ivar, 0]] = tgt_pol[[ivar, 0]];
+                            }
+                            nb_pol
+                        };
+                        let nx = self.mesh.edges[*iedge].normal[0];
+                        let ny = self.mesh.edges[*iedge].normal[1];
+                        let (lmatrix, rmatrix) = local_characteristics::compute_eigenmatrix(solutions.slice(s![ielem, .., 0]), nx, ny, hcr);
+                        let proj_tgt_pol: Array<f64, Ix2> = lmatrix.dot(&tgt_pol);
+                        let proj_nb_pol: Array<f64, Ix2> = lmatrix.dot(&average_modified_nb_pol);
+                        let proj_pols: [Array<f64, Ix2>; 2] = [proj_tgt_pol, proj_nb_pol];
+                        let mut nonlinear_weights = [0.0; 2];
+                        {
+                            let mut beta = [0.0; 2];
+                            let k = self.solver_param.order_of_polynomials;
+                            for (i, proj_pol) in proj_pols.iter().enumerate() {
+                                for l in 1..=k {
+                                    for l_1 in 0..=l {
+                                        let l_2 = l - l_1;
+                                        let mut integral = 0.0;
+                                        for (igp, cell_weight) in self.gauss_points.cell_weights.indexed_iter() {
+                                            for ((_, ibasis), proj_pol_value) in proj_pol.indexed_iter() {
+                                                integral += 0.5 * element.jacob_det * cell_weight 
+                                                    * (1.0 / Self::factorial(l) * proj_pol_value
+                                                    * element.dphis_cell_gps[[igp, ibasis]].get(&(l_1, l_2)).unwrap()).powf(2.0);
+                                            }
+                                        }
+                                        /*
+                                        for igp in 0..ngp {
+                                            for ivar in 0..neq {
+                                                for ibasis in 0..nbasis {
+                                                    integral += 0.5 * element.jacob_det * self.gauss_points.cell_weights[igp] 
+                                                        * (1.0 / self.factorial(l) * proj_pol[[ivar, ibasis]] 
                                                         * element.derivatives[[igp, ibasis]].get(&(l_1, l_2)).unwrap()).powf(2.0);
                                                 }
                                             }
-                                            /*
-                                            for igp in 0..ngp {
-                                                for ivar in 0..neq {
-                                                    for ibasis in 0..nbasis {
-                                                        integral += 0.5 * element.jacob_det * self.gauss_points.cell_weights[igp] 
-                                                            * (1.0 / self.factorial(l) * proj_pol[[ivar, ibasis]] 
-                                                            * element.derivatives[[igp, ibasis]].get(&(l_1, l_2)).unwrap()).powf(2.0);
-                                                    }
-                                                }
-                                            }
-                                            */
-                                            beta[i] += element.jacob_det.powf((l - 1) as f64) * integral;                                            
                                         }
+                                        */
+                                        beta[i] += element.jacob_det.powf((l - 1) as f64) * integral;                                            
                                     }
-                                    nonlinear_weights[i] = linear_weights[i] / (beta[i] + EPSILON).powf(2.0);
                                 }
+                                nonlinear_weights[i] = linear_weights[i] / (beta[i] + EPSILON).powf(2.0);
                             }
-                            let mut weights = [0.0; 2];
-                            for i in 0..2 {
-                                weights[i] = nonlinear_weights[i] / (nonlinear_weights[0] + nonlinear_weights[1]);
-                            }
-                            let pol_new: Array<f64, Ix2> = weights[0] * &proj_pols[0] + weights[1] * &proj_pols[1];
-                            reconstructed_pol = reconstructed_pol + rmatrix.dot(&pol_new) * self.mesh.elements[ineighbour].jacob_det * 0.5;
-                        },
-                        EdgeTypeAndIndex::Boundary(_) => {},
+                        }
+                        let mut weights = [0.0; 2];
+                        for i in 0..2 {
+                            weights[i] = nonlinear_weights[i] / (nonlinear_weights[0] + nonlinear_weights[1]);
+                        }
+                        let pol_new: Array<f64, Ix2> = weights[0] * &proj_pols[0] + weights[1] * &proj_pols[1];
+                        reconstructed_pol = reconstructed_pol + rmatrix.dot(&pol_new) * self.mesh.elements[ineighbour].jacob_det * 0.5;
+                    }
+                    else {
+                        continue;
                     }
                 }
                 reconstructed_pol /= neighbour_area;

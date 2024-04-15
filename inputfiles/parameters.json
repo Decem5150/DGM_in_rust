@@ -9,6 +9,7 @@
     "number_of_basis_functions": 6,
     "order_of_polynomials": 2,
     "hcr": 1.4,
+    "prandtl_number": 0.72,
     "inviscid_flux_scheme": "HLLC",
     "time_scheme": "RK3"
 }

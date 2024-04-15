@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use ndarray::Array;
+use ndarray::{Array, Ix3};
 use ndarray::{Ix1, Ix2};
 use crate::gauss_point::GaussPoints;
 use crate::basis_function::DubinerBasis;
 pub struct Mesh { 
     pub elements: Array<Element, Ix1>,
     pub edges: Array<Edge, Ix1>,
-    pub indices_internal_elements: Array<usize, Ix1>,
-    pub indices_boundary_elements: Array<usize, Ix1>,
-    pub boundary_edges: Array<BoundaryEdge, Ix1>,
+    pub internal_edge_indices: Array<usize, Ix1>,
+    pub internal_element_indices: Array<usize, Ix1>,
+    pub boundary_element_indices: Array<usize, Ix1>,
     pub vertices: Array<Vertex, Ix1>,
     pub patches: Array<Patch, Ix1>,
 }
@@ -22,24 +22,9 @@ impl Mesh {
             edge.normal[0] = (y2 - y1) / edge.jacob_det;
             edge.normal[1] = -(x2 - x1) / edge.jacob_det;
         }
-        for edge in self.boundary_edges.iter_mut() {
-            let x1 = self.vertices[edge.ivertices[0]].x;
-            let x2 = self.vertices[edge.ivertices[1]].x;
-            let y1 = self.vertices[edge.ivertices[0]].y;
-            let y2 = self.vertices[edge.ivertices[1]].y;
-            edge.normal[0] = (y2 - y1) / edge.jacob_det;
-            edge.normal[1] = -(x2 - x1) / edge.jacob_det;
-        }
     }
     pub fn compute_jacob_det(&mut self) {
         for edge in self.edges.iter_mut() {
-            let x1 = self.vertices[edge.ivertices[0]].x;
-            let x2 = self.vertices[edge.ivertices[1]].x;
-            let y1 = self.vertices[edge.ivertices[0]].y;
-            let y2 = self.vertices[edge.ivertices[1]].y;
-            edge.jacob_det = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
-        }
-        for edge in self.boundary_edges.iter_mut() {
             let x1 = self.vertices[edge.ivertices[0]].x;
             let x2 = self.vertices[edge.ivertices[1]].x;
             let y1 = self.vertices[edge.ivertices[0]].y;
@@ -98,7 +83,7 @@ impl Mesh {
             element.minimum_height = (2.0 * surface / a).min(2.0 * surface / b).min(2.0 * surface / c);
         }
     }
-    pub fn compute_derivatives(&mut self, basis: &DubinerBasis, ngp: usize, nbasis: usize) {
+    pub fn compute_dphi(&mut self, basis: &DubinerBasis, ngp: usize, nbasis: usize) {
         for element in self.elements.iter_mut() {
             let x1 = self.vertices[element.ivertices[0]].x;
             let x2 = self.vertices[element.ivertices[1]].x;
@@ -116,16 +101,32 @@ impl Mesh {
             let deta_dy = dx_dxi / element.jacob_det;
             for igp in 0..ngp {
                 for ibasis in 0..nbasis {
-                    let dphi_dxi = *basis.derivatives[[igp, ibasis]].get(&(1, 0)).unwrap();
-                    let dphi_deta = *basis.derivatives[[igp, ibasis]].get(&(0, 1)).unwrap();
-                    let dphi_dxidxi = *basis.derivatives[[igp, ibasis]].get(&(2, 0)).unwrap();
-                    let dphi_dxideta = *basis.derivatives[[igp, ibasis]].get(&(1, 1)).unwrap();
-                    let dphi_detadeta = *basis.derivatives[[igp, ibasis]].get(&(0, 2)).unwrap();
-                    element.derivatives[[igp, ibasis]].insert((1, 0), dxi_dx * dphi_dxi + deta_dx * dphi_deta);
-                    element.derivatives[[igp, ibasis]].insert((0, 1), dxi_dy * dphi_dxi + deta_dy * dphi_deta);
-                    element.derivatives[[igp, ibasis]].insert((2, 0), dxi_dx.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dx * deta_dx * dphi_dxideta + deta_dx.powf(2.0) * dphi_detadeta);
-                    element.derivatives[[igp, ibasis]].insert((1, 1), dxi_dx * dxi_dy * dphi_dxidxi + (dxi_dx * deta_dy + deta_dx * dxi_dy) * dphi_dxideta + deta_dx * deta_dy * dphi_detadeta);
-                    element.derivatives[[igp, ibasis]].insert((0, 2), dxi_dy.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dy * deta_dy * dphi_dxideta + deta_dy.powf(2.0) * dphi_detadeta);
+                    let dphi_dxi = *basis.dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
+                    let dphi_deta = *basis.dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
+                    let dphi_dxidxi = *basis.dphis_cell_gps[[igp, ibasis]].get(&(2, 0)).unwrap();
+                    let dphi_dxideta = *basis.dphis_cell_gps[[igp, ibasis]].get(&(1, 1)).unwrap();
+                    let dphi_detadeta = *basis.dphis_cell_gps[[igp, ibasis]].get(&(0, 2)).unwrap();
+                    element.dphis_cell_gps[[igp, ibasis]].insert((1, 0), dxi_dx * dphi_dxi + deta_dx * dphi_deta);
+                    element.dphis_cell_gps[[igp, ibasis]].insert((0, 1), dxi_dy * dphi_dxi + deta_dy * dphi_deta);
+                    element.dphis_cell_gps[[igp, ibasis]].insert((2, 0), dxi_dx.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dx * deta_dx * dphi_dxideta + deta_dx.powf(2.0) * dphi_detadeta);
+                    element.dphis_cell_gps[[igp, ibasis]].insert((1, 1), dxi_dx * dxi_dy * dphi_dxidxi + (dxi_dx * deta_dy + deta_dx * dxi_dy) * dphi_dxideta + deta_dx * deta_dy * dphi_detadeta);
+                    element.dphis_cell_gps[[igp, ibasis]].insert((0, 2), dxi_dy.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dy * deta_dy * dphi_dxideta + deta_dy.powf(2.0) * dphi_detadeta);
+                }
+            }
+            for iedge in 0..3 {
+                for igp in 0..ngp {
+                    for ibasis in 0..nbasis {
+                        let dphi_dxi = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(1, 0)).unwrap();
+                        let dphi_deta = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(0, 1)).unwrap();
+                        let dphi_dxidxi = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(2, 0)).unwrap();
+                        let dphi_dxideta = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(1, 1)).unwrap();
+                        let dphi_detadeta = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(0, 2)).unwrap();
+                        element.dphis_edge_gps[[iedge, igp, ibasis]].insert((1, 0), dxi_dx * dphi_dxi + deta_dx * dphi_deta);
+                        element.dphis_edge_gps[[iedge, igp, ibasis]].insert((0, 1), dxi_dy * dphi_dxi + deta_dy * dphi_deta);
+                        element.dphis_edge_gps[[iedge, igp, ibasis]].insert((2, 0), dxi_dx.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dx * deta_dx * dphi_dxideta + deta_dx.powf(2.0) * dphi_detadeta);
+                        element.dphis_edge_gps[[iedge, igp, ibasis]].insert((1, 1), dxi_dx * dxi_dy * dphi_dxidxi + (dxi_dx * deta_dy + deta_dx * dxi_dy) * dphi_dxideta + deta_dx * deta_dy * dphi_detadeta);
+                        element.dphis_edge_gps[[iedge, igp, ibasis]].insert((0, 2), dxi_dy.powf(2.0) * dphi_dxidxi + 2.0 * dxi_dy * deta_dy * dphi_dxideta + deta_dy.powf(2.0) * dphi_detadeta);
+                    }
                 }
             }
         }
@@ -133,16 +134,14 @@ impl Mesh {
     pub fn set_neighbours(&mut self) {
         for element in self.elements.iter_mut() {
             for (in_cell_index, iedge) in element.iedges.iter().enumerate() {
-                match *iedge {
-                    EdgeTypeAndIndex::Boundary(_) => (),
-                    EdgeTypeAndIndex::Internal(iedge) => {
-                        let edge = &self.edges[iedge];
-                        if element.ivertices[in_cell_index] == edge.ivertices[0] {
-                            element.ineighbours[in_cell_index] = Some(edge.ielements[1]);
-                        } else {
-                            element.ineighbours[in_cell_index] = Some(edge.ielements[0]);
-                        }
-                    }
+                let edge = &self.edges[*iedge];
+                if edge.ielements[1] == -1 {
+                    continue;
+                }
+                else if element.ivertices[in_cell_index] == edge.ivertices[0] {
+                    element.ineighbours[in_cell_index] = edge.ielements[1];
+                } else {
+                    element.ineighbours[in_cell_index] = edge.ielements[0];
                 }
             }
         }
@@ -155,9 +154,10 @@ pub struct Vertex {
 #[derive(Debug)]
 pub struct Element {
     pub ivertices: Array<usize, Ix1>,
-    pub iedges: Array<EdgeTypeAndIndex, Ix1>,
-    pub ineighbours: Array<Option<usize>, Ix1>,
-    pub derivatives: Array<HashMap<(usize, usize), f64>, Ix2>,
+    pub iedges: Array<usize, Ix1>,
+    pub ineighbours: Array<isize, Ix1>,
+    pub dphis_cell_gps: Array<HashMap<(usize, usize), f64>, Ix2>,
+    pub dphis_edge_gps: Array<HashMap<(usize, usize), f64>, Ix3>,
     pub jacob_det: f64,
     pub circumradius: f64,
     pub minimum_height: f64,
@@ -169,26 +169,18 @@ pub enum EdgeTypeAndIndex {
 }
 #[derive(Debug)]
 pub struct Edge {
-    pub ielements: [usize; 2],
+    pub ielements: [isize; 2],
     pub ivertices: [usize; 2],
     pub jacob_det: f64,
     pub normal: [f64; 2],
-    pub in_cell_indices: [usize; 2],
+    pub in_cell_indices: [isize; 2],
+    pub ipatch: isize
     //pub hcr: f64,
 }
 #[derive(Clone)]
 pub enum BoundaryType {
     Wall,
     FarField,
-}
-pub struct BoundaryEdge {
-    pub ivertices: [usize; 2],
-    pub ielement: usize,
-    pub jacob_det: f64,
-    pub normal: [f64; 2],
-    pub in_cell_index: usize,
-    pub boundary_type: BoundaryType,
-    //pub hcr: f64,
 }
 pub struct BoundaryQuantity {
     pub rho: f64,

@@ -1,15 +1,81 @@
 use ndarray::{Ix1, Ix2, Ix3};
 use ndarray::{Array, Axis};
 use ndarray::s;
-use crate::mesh::{BoundaryEdge, BoundaryType, Patch};
+use crate::mesh::{BoundaryType, Edge, Patch};
 use super::{local_characteristics, SpatialDisc};
 impl<'a> SpatialDisc<'a> {
     pub fn apply_bc(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        /*
         for patch in self.mesh.patches.iter() {
             match patch.boundary_type {
                 BoundaryType::Wall => self.wall(residuals, solutions, patch),
                 BoundaryType::FarField => self.far_field(residuals, solutions, patch),
                 //_ => panic!("Boundary type not implemented"),
+            }
+        }
+        */
+        let ngp = self.solver_param.number_of_cell_gp;
+        let neq = self.solver_param.number_of_equations;
+        let nbasis = self.solver_param.number_of_basis_functions;
+        let cell_weights = &self.gauss_points.cell_weights;
+        let edge_weights = &self.gauss_points.edge_weights;
+        for &ielem in self.mesh.boundary_element_indices.iter() {
+            let element = &self.mesh.elements[ielem];
+            let mut global_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+            let mut global_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+            for (ilic, iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
+                let edge = &self.mesh.edges[*iedge];
+                if edge.ipatch == -1 {
+                    let mut left_local_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+                    let mut left_local_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+                    let mut right_local_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+                    let mut right_local_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+                }
+                let (nx, ny) = {
+                    if element.ivertices[ilic] == edge.ivertices[0] {
+                        (edge.normal[0], edge.normal[1])
+                    } else {
+                        (-edge.normal[0], -edge.normal[1])
+                    }
+                };
+                let boundary_type = self.mesh.patches[edge.ipatch as usize].boundary_type;
+                match boundary_type {
+                    BoundaryType::Wall => {
+                        for igp in 0..ngp {
+                            let left_values: Array<f64, Ix1> = self.compute_boundary_edges_values(edge, solutions, igp);
+                            let pressure = (self.flow_param.hcr - 1.0) * (left_values[3] - 0.5 * (left_values[1] * left_values[1] + left_values[2] * left_values[2]) / left_values[0]);
+                            let boundary_energy = pressure / (self.flow_param.hcr - 1.0);
+                            let x_momentum_jump_x = left_values[1] * nx;
+                            let x_momentum_jump_y = left_values[1] * ny;
+                            let y_momentum_jump_x = left_values[2] * nx;
+                            let y_momentum_jump_y = left_values[2] * ny;
+                            let energy_jump_x = (left_values[3] - boundary_energy) * nx;
+                            let energy_jump_y = (left_values[3] - boundary_energy) * ny;
+                            for ibasis in 0..nbasis {
+                                local_lift_x[[1, ibasis]] += 0.5 * x_momentum_jump_x * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                local_lift_x[[2, ibasis]] += 0.5 * x_momentum_jump_y * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                local_lift_x[[3, ibasis]] += 0.5 * energy_jump_x * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                local_lift_y[[1, ibasis]] += 0.5 * y_momentum_jump_x * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                local_lift_y[[2, ibasis]] += 0.5 * y_momentum_jump_y * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                local_lift_y[[3, ibasis]] += 0.5 * energy_jump_y * self.basis.phis_cell_gps[[igp, ibasis]] * cell_weights[igp] * 0.5 * element.jacob_det;
+                                // interface inviscid flux
+                                residuals[[ielem, 1, ibasis]] -= pressure * edge_weights[igp] * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * nx * 0.5 * edge.jacob_det;
+                                residuals[[ielem, 2, ibasis]] -= pressure * edge_weights[igp] * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * ny * 0.5 * edge.jacob_det;
+                            }
+                        }
+                        for ivar in 1..neq {
+                            for ibasis in 0..nbasis {
+                                local_lift_x[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * element.jacob_det;
+                                local_lift_y[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * element.jacob_det;
+                            }
+                        }
+                        global_lift_x = global_lift_x + local_lift_x;
+                        global_lift_y = global_lift_y + local_lift_y;
+                    }
+                    BoundaryType::FarField {
+
+                    }
+                }
             }
         }
     }
@@ -26,16 +92,10 @@ impl<'a> SpatialDisc<'a> {
                 } else {
                     (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1])
                 }
-                /* 
-                match self.mesh.elements[ielem].normal_directions[in_cell_index] {
-                    NormalDirection::Inward => (-self.mesh.boundary_edges[iedge].normal[0], -self.mesh.boundary_edges[iedge].normal[1]),
-                    NormalDirection::Outward => (self.mesh.boundary_edges[iedge].normal[0], self.mesh.boundary_edges[iedge].normal[1]),
-                }
-                */
             };
-            let left_values_gps: Array<f64, Ix2> = self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions);
+            let left_value: Array<f64, Ix2> = self.compute_boundary_edges_values(&self.mesh.boundary_edges[iedge], solutions);
             for igp in 0..ngp {
-                let pressure = (hcr - 1.0) * (left_values_gps[[igp, 3]] - 0.5 * (left_values_gps[[igp, 1]] * left_values_gps[[igp, 1]] + left_values_gps[[igp, 2]] * left_values_gps[[igp, 2]]) / left_values_gps[[igp, 0]]);
+                let pressure = (hcr - 1.0) * (left_value[[igp, 3]] - 0.5 * (left_value[[igp, 1]] * left_value[[igp, 1]] + left_value[[igp, 2]] * left_value[[igp, 2]]) / left_value[[igp, 0]]);
                 for ibasis in 0..nbasis {
                     residuals[[ielem, 1, ibasis]] -= pressure * self.gauss_points.edge_weights[igp] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]] * nx * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
                     residuals[[ielem, 2, ibasis]] -= pressure * self.gauss_points.edge_weights[igp] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]] * ny * 0.5 * self.mesh.boundary_edges[iedge].jacob_det;
@@ -99,19 +159,17 @@ impl<'a> SpatialDisc<'a> {
             }
         }
     }
-    fn compute_boundary_edges_values(&self, edge: &BoundaryEdge, solutions: &Array<f64, Ix3>) -> Array<f64, Ix2> {
+    fn compute_boundary_edges_values(&self, edge: &Edge, solutions: &Array<f64, Ix3>, igp: usize) -> Array<f64, Ix1> {
         let nbasis = self.solver_param.number_of_basis_functions;
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
-        let mut edges_values = Array::zeros((ngp, neq));
-        let internal_element = edge.ielement;
-        let in_cell_index = edge.in_cell_index;
-        let internal_sol = solutions.slice(s![internal_element, .., ..]);
-        for igp in 0..ngp {
-            for ivar in 0..neq {
-                for ibasis in 0..nbasis {
-                    edges_values[[igp, ivar]] += internal_sol[[ivar, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
-                }
+        let mut edges_values = Array::zeros(neq);
+        let ielem = edge.ielements[0];
+        let in_cell_index = edge.in_cell_indices[0] as usize;
+        let internal_sol = solutions.slice(s![ielem, .., ..]);
+        for ivar in 0..neq {
+            for ibasis in 0..nbasis {
+                edges_values[ivar] += internal_sol[[ivar, ibasis]] * self.basis.phis_edge_gps[[in_cell_index, igp, ibasis]];
             }
         }
         edges_values

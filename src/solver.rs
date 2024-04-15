@@ -1,5 +1,6 @@
 use ndarray::Array;
 use ndarray::Ix3;
+use ndarray::Ix4;
 use crate::basis_function::DubinerBasis;
 use crate::basis_function::GaussPoints;
 use crate::io::initial_solution_parser::InitialSolution;
@@ -26,11 +27,8 @@ pub struct MeshParameters {
 }
 pub struct FlowParameters {
     pub hcr: f64,
-    /*
     pub gas_constant: f64,
-    pub viscosity: f64,
     pub prandtl_number: f64,
-    */
 }
 pub struct Solver<'a> {
     pub residuals: Array<f64, Ix3>,
