@@ -31,7 +31,8 @@ impl<'a> SpatialDisc<'a> {
         self.divide_residual_by_mass_mat_diag(residuals);
     }
     fn integrate_over_cell(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
-        let ngp = self.solver_param.number_of_cell_gp;
+        let cell_ngp = self.solver_param.number_of_cell_gp;
+        let edge_ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let weights = &self.gauss_points.cell_weights;
@@ -53,12 +54,12 @@ impl<'a> SpatialDisc<'a> {
                                 (edge.in_cell_indices[0] as usize, edge.ielements[0] as usize, -edge.normal[0], -edge.normal[1])
                             }
                         };
-                        for igp in 0..self.solver_param.number_of_edge_gp {
+                        for igp in 0..edge_ngp {
                             let mut left_value = 0.0;
                             let mut right_value = 0.0;
                             for ibasis in 0..nbasis {
                                 left_value += solutions[[ilelem, ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
-                                right_value += solutions[[irelem, ivar, ibasis]] * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]];
+                                right_value += solutions[[irelem, ivar, ibasis]] * self.basis.phis_edge_gps[[iric, edge_ngp - 1 - igp, ibasis]];
                             }
                             let jump_x = (left_value - right_value) * nx;
                             let jump_y = (left_value - right_value) * ny;
@@ -102,7 +103,7 @@ impl<'a> SpatialDisc<'a> {
                     global_lift_y[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielem].jacob_det;
                 }
             }
-            for igp in 0..ngp {
+            for igp in 0..cell_ngp {
                 let mut sol: Array<f64, Ix1> = Array::zeros(neq);
                 for ivar in 0..solutions.shape()[1] {
                     for ibasis in 0..solutions.shape()[2] {
@@ -145,6 +146,8 @@ impl<'a> SpatialDisc<'a> {
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
                         residuals[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                        //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
+                            //* weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
@@ -203,6 +206,7 @@ impl<'a> SpatialDisc<'a> {
                         right_values[ivar] += right_dofs[[ivar, ibasis]] * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]];
                     }
                 }
+                //println!("{:?}", edge.ielements);
                 let num_flux = match self.solver_param.inviscid_flux_scheme {
                     InviscidFluxScheme::HLLC => flux::hllc(
                         &left_values, 
@@ -228,19 +232,19 @@ impl<'a> SpatialDisc<'a> {
                         let mut dsol_dy = 0.0;
                         let mut lift_x = 0.0;
                         let mut lift_y = 0.0;
-                        for ibasis in 0..solutions.shape()[2] {
+                        for ibasis in 0..nbasis {
                             let dphi_dx = *self.mesh.elements[ilelem].dphis_edge_gps[[ilic, igp, ibasis]].get(&(1, 0)).unwrap();
                             let dphi_dy = *self.mesh.elements[ilelem].dphis_edge_gps[[ilic, igp, ibasis]].get(&(0, 1)).unwrap();
                             dsol_dx += left_dofs[[ivar, ibasis]] * dphi_dx;
                             dsol_dy += left_dofs[[ivar, ibasis]] * dphi_dy;
-                            lift_x += left_local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
-                            lift_y += left_local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                            lift_x += 3.0 * left_local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                            lift_y += 3.0 * left_local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
                         }
-                        fv += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
-                        gv += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
+                        fv[iflux] += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
+                        gv[iflux] += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
                     }
                 }
-                num_viscous_flux = num_viscous_flux + 0.5 * (nx * &fv + ny * &gv);
+                num_viscous_flux = num_viscous_flux + 0.5 * (nx * fv + ny * gv);
                 // right contribution to viscous flux
                 fv = Array::zeros(neq);
                 gv = Array::zeros(neq);
@@ -256,7 +260,7 @@ impl<'a> SpatialDisc<'a> {
                         let mut dsol_dy = 0.0;
                         let mut lift_x = 0.0;
                         let mut lift_y = 0.0;
-                        for ibasis in 0..solutions.shape()[2] {
+                        for ibasis in 0..nbasis {
                             let dphi_dx = *self.mesh.elements[irelem].dphis_edge_gps[[iric, ngp - 1 - igp, ibasis]].get(&(1, 0)).unwrap();
                             let dphi_dy = *self.mesh.elements[irelem].dphis_edge_gps[[iric, ngp - 1 - igp, ibasis]].get(&(0, 1)).unwrap();
                             dsol_dx += right_dofs[[ivar, ibasis]] * dphi_dx;
@@ -264,16 +268,18 @@ impl<'a> SpatialDisc<'a> {
                             lift_x += right_local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]];
                             lift_y += right_local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]];
                         }
-                        fv += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
-                        gv += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
+                        fv[iflux] += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
+                        gv[iflux] += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
                     }
                 }
                 num_viscous_flux = num_viscous_flux + 0.5 * (nx * fv + ny * gv);
 
                 for ivar in 0..residuals.shape()[1] {
                     for ibasis in 0..residuals.shape()[2] {
-                        residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar] + num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
-                        residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar] + num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
+                        residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                        residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
+                        //residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                        //residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
                     }
                 }
             }

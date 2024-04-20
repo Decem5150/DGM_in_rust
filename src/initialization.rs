@@ -27,8 +27,9 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
         }
     };
     solver_parameters.cfl = {
+        let viscous_coefficient = 1.0;
         let p = solver_parameters.order_of_polynomials as f64;
-        1.0 / ((2.0 * p + 1.0) * (1.0 + 4.0 / (p + 2.0).powf(2.0)))
+        viscous_coefficient * 1.0 / ((2.0 * p + 1.0) * (1.0 + 4.0 / (p + 2.0).powf(2.0)))
     };
     dbg!(&solver_parameters.cfl);
     let flow_parameters = FlowParameters {
@@ -58,7 +59,7 @@ pub fn initialize_mesh_basis_gauss_params() -> (Mesh, DubinerBasis, GaussPoints,
     mesh.compute_jacob_det();
     mesh.compute_normal();
     //mesh.compute_mass_mat(&basis, &gauss_points, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
-    mesh.compute_dphi(&basis, solver_parameters.number_of_cell_gp, solver_parameters.number_of_basis_functions);
+    mesh.compute_dphi(&basis, solver_parameters.number_of_cell_gp, solver_parameters.number_of_edge_gp, solver_parameters.number_of_basis_functions);
     mesh.compute_circumradius();
     mesh.compute_minimum_height();
     mesh.set_neighbours();

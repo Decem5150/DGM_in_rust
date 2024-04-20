@@ -2,7 +2,7 @@
     "mesh_file": "inputfiles/naca0012.msh",
     "cfl" : 0.6,
     "final_time": 500.0,
-    "final_step": 20000,
+    "final_step": 100,
     "number_of_cell_gp": 6,
     "number_of_edge_gp": 3,
     "number_of_equations": 4,
@@ -10,6 +10,7 @@
     "order_of_polynomials": 2,
     "hcr": 1.4,
     "prandtl_number": 0.72,
+    "gas_constant": 287.0,
     "inviscid_flux_scheme": "HLLC",
     "time_scheme": "RK3"
 }

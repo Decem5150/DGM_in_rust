@@ -83,7 +83,7 @@ impl Mesh {
             element.minimum_height = (2.0 * surface / a).min(2.0 * surface / b).min(2.0 * surface / c);
         }
     }
-    pub fn compute_dphi(&mut self, basis: &DubinerBasis, ngp: usize, nbasis: usize) {
+    pub fn compute_dphi(&mut self, basis: &DubinerBasis, cell_ngp: usize, edge_ngp: usize, nbasis: usize) {
         for element in self.elements.iter_mut() {
             let x1 = self.vertices[element.ivertices[0]].x;
             let x2 = self.vertices[element.ivertices[1]].x;
@@ -99,7 +99,7 @@ impl Mesh {
             let dxi_dy = -dx_deta / element.jacob_det;
             let deta_dx = -dy_dxi / element.jacob_det;
             let deta_dy = dx_dxi / element.jacob_det;
-            for igp in 0..ngp {
+            for igp in 0..cell_ngp {
                 for ibasis in 0..nbasis {
                     let dphi_dxi = *basis.dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
                     let dphi_deta = *basis.dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
@@ -114,7 +114,7 @@ impl Mesh {
                 }
             }
             for iedge in 0..3 {
-                for igp in 0..ngp {
+                for igp in 0..edge_ngp {
                     for ibasis in 0..nbasis {
                         let dphi_dxi = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(1, 0)).unwrap();
                         let dphi_deta = *basis.dphis_edge_gps[[iedge, igp, ibasis]].get(&(0, 1)).unwrap();

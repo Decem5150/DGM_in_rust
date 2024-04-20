@@ -40,7 +40,7 @@ impl<'a> SpatialDisc<'a> {
                     let right_dofs = solutions.slice(s![irelem, .., ..]);
                     for ivar in 0..neq {
                         for ibasis in 0..nbasis {
-                            for igp in 0..self.solver_param.number_of_edge_gp {
+                            for igp in 0..edge_ngp {
                                 let mut left_value = 0.0;
                                 let mut right_value = 0.0;
                                 for ibasis in 0..nbasis {
@@ -108,7 +108,6 @@ impl<'a> SpatialDisc<'a> {
                                 let mut fv: Array<f64, Ix1> = Array::zeros(neq);
                                 let mut gv: Array<f64, Ix1> = Array::zeros(neq);
                                 let viscosity = {
-                                    let pressure = (self.flow_param.hcr - 1.0) * (left_values[3] - 0.5 * (left_values[1] * left_values[1] + left_values[2] * left_values[2]) / left_values[0]);
                                     let temperature = pressure / (self.flow_param.gas_constant * left_values[0]);
                                     Self::compute_dynamic_viscosity(temperature)
                                 };
@@ -124,17 +123,18 @@ impl<'a> SpatialDisc<'a> {
                                             let dphi_dy = element.dphis_edge_gps[[ilic, igp, ibasis]].get(&(0, 1)).unwrap();
                                             dsol_dx += dofs[[ivar, ibasis]] * dphi_dx;
                                             dsol_dy += dofs[[ivar, ibasis]] * dphi_dy;
-                                            lift_x += local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
-                                            lift_y += local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                                            lift_x += 3.0 * local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                                            lift_y += 3.0 * local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
                                         }
-                                        fv += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
-                                        gv += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
+                                        fv[iflux] += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
+                                        gv[iflux] += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
                                     }
                                 }
-                                let boundary_viscous_flux = nx * &fv + ny * &gv;
+                                let boundary_viscous_flux = nx * fv + ny * gv;
                                 for ivar in 0..residuals.shape()[1] {
                                     for ibasis in 0..residuals.shape()[2] {
-                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] + boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                        //residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                     }
                                 }
                             }
@@ -186,7 +186,7 @@ impl<'a> SpatialDisc<'a> {
                             }
                             global_lift_x = global_lift_x + &local_lift_x;
                             global_lift_y = global_lift_y + &local_lift_y;
-                            for ivar in 1..neq {
+                            for ivar in 0..neq {
                                 for ibasis in 0..nbasis {
                                     local_lift_x[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * element.jacob_det;
                                     local_lift_y[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * element.jacob_det;
@@ -198,18 +198,13 @@ impl<'a> SpatialDisc<'a> {
                                 let v_new = q_new[2] / q_new[0];
                                 let vn_new = u_new * nx + v_new * ny;
                                 let p_new = (self.flow_param.hcr - 1.0) * (q_new[3] - 0.5 * (q_new[1] * q_new[1] + q_new[2] * q_new[2]) / q_new[0]);
-                                let h_new = (q_new[3] + p_new) / q_new[0];
+                                let h_new = q_new[3] + p_new;
                                 let boundary_inviscid_flux = [
                                     q_new[0] * vn_new,
                                     q_new[1] * vn_new + p_new * nx,
                                     q_new[2] * vn_new + p_new * ny,
-                                    q_new[0] * h_new * vn_new
+                                    h_new * vn_new
                                 ];
-                                for ivar in 0..neq {
-                                    for ibasis in 0..nbasis {
-                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * boundary_inviscid_flux[ivar] * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
-                                    }
-                                }
                                 let left_values = self.compute_boundary_edges_values(edge, solutions, igp);
                                 let mut fv: Array<f64, Ix1> = Array::zeros(neq);
                                 let mut gv: Array<f64, Ix1> = Array::zeros(neq);
@@ -230,22 +225,28 @@ impl<'a> SpatialDisc<'a> {
                                             let dphi_dy = element.dphis_edge_gps[[ilic, igp, ibasis]].get(&(0, 1)).unwrap();
                                             dsol_dx += dofs[[ivar, ibasis]] * dphi_dx;
                                             dsol_dy += dofs[[ivar, ibasis]] * dphi_dy;
-                                            lift_x += local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
-                                            lift_y += local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                                            lift_x += 3.0 * local_lift_x[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
+                                            lift_y += 3.0 * local_lift_y[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
                                         }
-                                        fv += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
-                                        gv += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
+                                        fv[iflux] += g11[[iflux, ivar]] * (dsol_dx + lift_x) + g12[[iflux, ivar]] * (dsol_dy + lift_y);
+                                        gv[iflux] += g21[[iflux, ivar]] * (dsol_dx + lift_x) + g22[[iflux, ivar]] * (dsol_dy + lift_y);
                                     }
                                 }
-                                let boundary_viscous_flux = nx * &fv + ny * &gv;
+                                let boundary_viscous_flux = nx * fv + ny * gv;
                                 for ivar in 0..residuals.shape()[1] {
                                     for ibasis in 0..residuals.shape()[2] {
-                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] + boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                     }
                                 }
                             }
                         }
                     }
+                }
+            }
+            for ivar in 0..neq {
+                for ibasis in 0..nbasis {
+                    global_lift_x[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                    global_lift_y[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielem].jacob_det;
                 }
             }
             for igp in 0..cell_ngp {
@@ -291,6 +292,8 @@ impl<'a> SpatialDisc<'a> {
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
                         residuals[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                        //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
+                            //* cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
