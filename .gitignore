@@ -1,4 +1,5 @@
 /target
+*.zip
 *.vtk
 *.msh
 *.csv
