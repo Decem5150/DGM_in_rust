@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use ndarray::{Array, Ix1, Ix2, Ix3};
 use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::io::boundary_condition_parser::FreeStreamCondition;

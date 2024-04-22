@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use ndarray::{Array, Ix1};
 use ndarray::{Ix2, Ix3};
 pub use super::gauss_point::GaussPoints;

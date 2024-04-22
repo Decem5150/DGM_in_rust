@@ -38,7 +38,7 @@ impl<'a> SpatialDisc<'a> {
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let weights = &self.gauss_points.cell_weights;
-        let residuals_sum: Array<f64, Ix3> = self.mesh.internal_element_indices.par_iter().fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
+        *residuals = &*residuals + self.mesh.internal_element_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
             let mut global_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut global_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             // solve for global lift
@@ -123,7 +123,6 @@ impl<'a> SpatialDisc<'a> {
             }
         residuals_sum
         }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
-        *residuals = &*residuals + residuals_sum;
     }
     fn integrate_over_edges(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         let nelem = self.mesh.elements.len();
@@ -131,7 +130,7 @@ impl<'a> SpatialDisc<'a> {
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let weights = &self.gauss_points.edge_weights;
-        let residuals_sum: Array<f64, Ix3> = self.mesh.internal_edge_indices.par_iter().fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &iedge| {
+        *residuals = &*residuals + self.mesh.internal_edge_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &iedge| {
             let edge = &self.mesh.edges[iedge];
             let mut left_local_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut left_local_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
@@ -258,7 +257,6 @@ impl<'a> SpatialDisc<'a> {
             }
             residuals_sum
         }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
-        *residuals = &*residuals + residuals_sum;
     }
     fn divide_residual_by_mass_mat_diag(&self, residuals: &mut Array<f64, Ix3>) {
         for ielem in 0..residuals.shape()[0] {

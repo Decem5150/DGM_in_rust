@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use ndarray::{Array, Ix3};
 use ndarray::{Ix1, Ix2};
 use crate::gauss_point::GaussPoints;
