@@ -2,7 +2,7 @@
     "mesh_file": "inputfiles/naca0012.msh",
     "cfl" : 0.6,
     "final_time": 500.0,
-    "final_step": 100,
+    "final_step": 50,
     "number_of_cell_gp": 6,
     "number_of_edge_gp": 3,
     "number_of_equations": 4,

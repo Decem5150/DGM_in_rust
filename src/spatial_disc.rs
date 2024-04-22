@@ -6,9 +6,10 @@ pub mod viscous;
 use ndarray::{Array, Ix1, Ix4};
 use ndarray::{Ix2, Ix3};
 use ndarray::s;
+use ndarray::parallel::prelude::*;
 use crate::basis_function::{DubinerBasis, GaussPoints};
 use crate::debug_utils::check_for_nan;
-use crate::mesh::{BoundaryType, EdgeTypeAndIndex, Mesh};
+use crate::mesh::Mesh;
 use crate::solver::{FlowParameters, SolverParameters, MeshParameters};
 pub enum InviscidFluxScheme {
     HLLC,
@@ -31,12 +32,13 @@ impl<'a> SpatialDisc<'a> {
         self.divide_residual_by_mass_mat_diag(residuals);
     }
     fn integrate_over_cell(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        let nelem = self.mesh.elements.len();
         let cell_ngp = self.solver_param.number_of_cell_gp;
         let edge_ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let weights = &self.gauss_points.cell_weights;
-        for &ielem in self.mesh.internal_element_indices.iter() {
+        let residuals_sum: Array<f64, Ix3> = self.mesh.internal_element_indices.par_iter().fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
             let mut global_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut global_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             // solve for global lift
@@ -66,38 +68,6 @@ impl<'a> SpatialDisc<'a> {
                             global_lift_x[[ivar, ibasis]] -= 0.5 * jump_x * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * edge_weights[igp] * 0.5 * edge.jacob_det;
                             global_lift_y[[ivar, ibasis]] -= 0.5 * jump_y * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * edge_weights[igp] * 0.5 * edge.jacob_det;
                         }
-                            /*
-                            EdgeTypeAndIndex::Boundary(iedge) => {
-                                let edge = &self.mesh.boundary_edges[*iedge];
-                                let ilelem = ielem;
-                                let (nx, ny) = {
-                                    if self.mesh.elements[ielem].ivertices[ilic] == edge.ivertices[0] {
-                                        (edge.normal[0], edge.normal[1])
-                                    } else {
-                                        (-edge.normal[0], -edge.normal[1])
-                                    }
-                                };
-                                match self.mesh.patches[edge.ipatch].boundary_type {
-                                    BoundaryType::Wall => {
-                                        for igp in 0..self.solver_param.number_of_edge_gp {
-                                            let mut left_value = 0.0;
-                                            for ibasis in 0..nbasis {
-                                                if ivar == 1||ivar == 2 {
-                                                    left_value += solutions[[ilelem, ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];
-                                                }
-                                            }
-                                            let jump_x = left_value * nx;
-                                            let jump_y = left_value * ny;
-                                            global_lift_x[[ivar, ibasis]] -= 0.5 * jump_x * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * edge_weights[igp] * 0.5 * edge.jacob_det;
-                                            global_lift_y[[ivar, ibasis]] -= 0.5 * jump_y * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * edge_weights[igp] * 0.5 * edge.jacob_det;
-                                        }
-                                    }
-                                    BoundaryType::FarField => {
-
-                                    }
-                                }
-                            }
-                            */
                     }
                     global_lift_x[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     global_lift_y[[ivar, ibasis]] /= self.basis.mass_mat_diag[ibasis] * 0.5 * self.mesh.elements[ielem].jacob_det;
@@ -144,22 +114,25 @@ impl<'a> SpatialDisc<'a> {
                     for ibasis in 0..solutions.shape()[2] {
                         let dphi_dx = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
-                        residuals[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
+                        residuals_sum[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                         //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
                             //* weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
-        }
+        residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
+        *residuals = &*residuals + residuals_sum;
     }
     fn integrate_over_edges(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        let nelem = self.mesh.elements.len();
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let weights = &self.gauss_points.edge_weights;
-        for iedge in self.mesh.internal_edge_indices.iter() {
-            let edge = &self.mesh.edges[*iedge];
+        let residuals_sum: Array<f64, Ix3> = self.mesh.internal_edge_indices.par_iter().fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &iedge| {
+            let edge = &self.mesh.edges[iedge];
             let mut left_local_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut left_local_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut right_local_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
@@ -276,14 +249,16 @@ impl<'a> SpatialDisc<'a> {
 
                 for ivar in 0..residuals.shape()[1] {
                     for ibasis in 0..residuals.shape()[2] {
-                        residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
-                        residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
+                        residuals_sum[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                        residuals_sum[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
                         //residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                         //residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
                     }
                 }
             }
-        }
+            residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
+        *residuals = &*residuals + residuals_sum;
     }
     fn divide_residual_by_mass_mat_diag(&self, residuals: &mut Array<f64, Ix3>) {
         for ielem in 0..residuals.shape()[0] {
