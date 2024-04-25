@@ -1,8 +1,7 @@
 use std::f64::EPSILON;
 
 use ndarray::{s, Ix2, Ix3};
-use ndarray::{Array, ArrayView, ArrayViewMut};
-use crate::mesh::{BoundaryType, Edge, EdgeTypeAndIndex, Element};
+use ndarray::Array;
 use crate::spatial_disc::{local_characteristics, SpatialDisc};
 impl SpatialDisc<'_> {
     pub fn modified_kxrcf(&self, solutions: &mut Array<f64, Ix3>, ielem: usize) -> bool {

@@ -1,6 +1,7 @@
 use ndarray::{Ix1, Ix2, Ix3};
 use ndarray::{Array, Axis};
 use ndarray::s;
+use ndarray::parallel::prelude::*;
 use crate::mesh::{BoundaryType, Edge};
 use super::flux::flux;
 use super::{local_characteristics, SpatialDisc};
@@ -17,11 +18,12 @@ impl<'a> SpatialDisc<'a> {
         */
         let cell_ngp = self.solver_param.number_of_cell_gp;
         let edge_ngp = self.solver_param.number_of_edge_gp;
+        let nelem = self.mesh.elements.len();
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let cell_weights = &self.gauss_points.cell_weights;
         let edge_weights = &self.gauss_points.edge_weights;
-        for &ielem in self.mesh.boundary_element_indices.iter() {
+        *residuals = &*residuals + self.mesh.boundary_element_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
             let element = &self.mesh.elements[ielem];
             let mut global_lift_x: Array<f64, Ix2> = Array::zeros((neq, nbasis));
             let mut global_lift_y: Array<f64, Ix2> = Array::zeros((neq, nbasis));
@@ -133,7 +135,7 @@ impl<'a> SpatialDisc<'a> {
                                 let boundary_viscous_flux = nx * fv + ny * gv;
                                 for ivar in 0..residuals.shape()[1] {
                                     for ibasis in 0..residuals.shape()[2] {
-                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                        residuals_sum[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                         //residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                     }
                                 }
@@ -235,7 +237,7 @@ impl<'a> SpatialDisc<'a> {
                                 let boundary_viscous_flux = nx * fv + ny * gv;
                                 for ivar in 0..residuals.shape()[1] {
                                     for ibasis in 0..residuals.shape()[2] {
-                                        residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                        residuals_sum[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                     }
                                 }
                             }
@@ -290,14 +292,15 @@ impl<'a> SpatialDisc<'a> {
                     for ibasis in 0..solutions.shape()[2] {
                         let dphi_dx = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
-                        residuals[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
+                        residuals_sum[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                         //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
                             //* cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
-        }
+            residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
     }
     /*
     fn wall(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>, patch: &Patch) {

@@ -1,6 +1,5 @@
 use ndarray::Array;
 use ndarray::Ix3;
-use ndarray::Ix4;
 use crate::basis_function::DubinerBasis;
 use crate::basis_function::GaussPoints;
 use crate::io::initial_solution_parser::InitialSolution;

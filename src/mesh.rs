@@ -1,7 +1,6 @@
 use hashbrown::HashMap;
 use ndarray::{Array, Ix3};
 use ndarray::{Ix1, Ix2};
-use crate::gauss_point::GaussPoints;
 use crate::basis_function::DubinerBasis;
 pub struct Mesh { 
     pub elements: Array<Element, Ix1>,
@@ -161,11 +160,6 @@ pub struct Element {
     pub jacob_det: f64,
     pub circumradius: f64,
     pub minimum_height: f64,
-}
-#[derive(Clone, Debug)]
-pub enum EdgeTypeAndIndex {
-    Boundary(usize),
-    Internal(usize),
 }
 #[derive(Debug)]
 pub struct Edge {
