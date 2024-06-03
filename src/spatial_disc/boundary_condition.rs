@@ -6,7 +6,119 @@ use crate::mesh::{BoundaryType, Edge};
 use super::flux::flux;
 use super::{local_characteristics, SpatialDisc};
 impl<'a> SpatialDisc<'a> {
-    pub fn apply_bc(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+    pub fn apply_bc_euler(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        let cell_ngp = self.solver_param.number_of_cell_gp;
+        let edge_ngp = self.solver_param.number_of_edge_gp;
+        let nelem = self.mesh.elements.len();
+        let neq = self.solver_param.number_of_equations;
+        let nbasis = self.solver_param.number_of_basis_functions;
+        let cell_weights = &self.gauss_points.cell_weights;
+        let edge_weights = &self.gauss_points.edge_weights;
+        *residuals = &*residuals + self.mesh.boundary_element_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
+            let element = &self.mesh.elements[ielem];
+            for (ilic, iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
+                let edge = &self.mesh.edges[*iedge];
+                if edge.ipatch != -1 {
+                    let (nx, ny) = {
+                        if element.ivertices[ilic] == edge.ivertices[0] {
+                            (edge.normal[0], edge.normal[1])
+                        } else {
+                            (-edge.normal[0], -edge.normal[1])
+                        }
+                    };
+                    let boundary_type = &self.mesh.patches[edge.ipatch as usize].boundary_type;
+                    match boundary_type {
+                        BoundaryType::Wall => {
+                            for igp in 0..edge_ngp {
+                                let left_values: Array<f64, Ix1> = self.compute_boundary_edges_values(edge, solutions, igp);
+                                let pressure = (self.flow_param.hcr - 1.0) * (left_values[3] - 0.5 * (left_values[1] * left_values[1] + left_values[2] * left_values[2]) / left_values[0]);
+                                let boundary_inviscid_flux = [
+                                    0.0,
+                                    pressure * nx,
+                                    pressure * ny,
+                                    0.0,
+                                ];
+                                for ivar in 0..residuals.shape()[1] {
+                                    for ibasis in 0..residuals.shape()[2] {
+                                        residuals_sum[[ielem, ivar, ibasis]] -= edge_weights[igp] * boundary_inviscid_flux[ivar] * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                    }
+                                }
+                            }
+                        }
+                        BoundaryType::FarField => {
+                            let boundary_quantity = self.mesh.patches[edge.ipatch as usize].boundary_quantity.as_ref().unwrap();
+                            let boundary_consvar = Array::from_iter([
+                                boundary_quantity.rho, 
+                                boundary_quantity.rho * boundary_quantity.u, 
+                                boundary_quantity.rho * boundary_quantity.v, 
+                                boundary_quantity.p / (self.flow_param.hcr - 1.0) + 0.5 * boundary_quantity.rho * (boundary_quantity.u.powi(2) + boundary_quantity.v.powi(2))
+                                ]);
+                            let mut q_new_gps: Array<f64, Ix2> = Array::zeros((edge_ngp, neq));
+                            for igp in 0..edge_ngp {
+                                let left_values: Array<f64, Ix1> = self.compute_boundary_edges_values(edge, solutions, igp);
+                                let u = left_values[1] / left_values[0];
+                                let v = left_values[2] / left_values[0];
+                                let p = (self.flow_param.hcr - 1.0) * (left_values[3] - 0.5 * (left_values[1] * left_values[1] + left_values[2] * left_values[2]) / left_values[0]);
+                                let c = (self.flow_param.hcr * p / left_values[0]).sqrt();
+                                let vn = u * nx + v * ny;
+                                let (left_elem_lmatrix, left_elem_rmatrix) = local_characteristics::compute_eigenmatrix(left_values.view(), nx, ny, self.flow_param.hcr);
+                                let left_elem_eigenvalues = [vn - c, vn, vn, vn + c];
+                                let alpha: Array<f64, Ix2> = left_elem_lmatrix.dot(&left_values).insert_axis(Axis(1));
+                                let beta: Array<f64, Ix2> = left_elem_lmatrix.dot(&boundary_consvar.clone().insert_axis(Axis(1)));
+                                let mut q_new: Array<f64, Ix1> = Array::zeros(neq);
+                                for i in 0..neq {
+                                    q_new[i] = if left_elem_eigenvalues[i] >= 0.0 {alpha[[i, 0]]} else {beta[[i, 0]]};
+                                }
+                                q_new = left_elem_rmatrix.dot(&q_new);
+                                q_new_gps.slice_mut(s![igp, ..]).assign(&q_new);
+                            }
+                            for igp in 0..edge_ngp {
+                                let q_new = q_new_gps.slice(s![igp, ..]);
+                                let u_new = q_new[1] / q_new[0];
+                                let v_new = q_new[2] / q_new[0];
+                                let vn_new = u_new * nx + v_new * ny;
+                                let p_new = (self.flow_param.hcr - 1.0) * (q_new[3] - 0.5 * (q_new[1] * q_new[1] + q_new[2] * q_new[2]) / q_new[0]);
+                                let h_new = q_new[3] + p_new;
+                                let boundary_inviscid_flux = [
+                                    q_new[0] * vn_new,
+                                    q_new[1] * vn_new + p_new * nx,
+                                    q_new[2] * vn_new + p_new * ny,
+                                    h_new * vn_new
+                                ];
+                                for ivar in 0..residuals.shape()[1] {
+                                    for ibasis in 0..residuals.shape()[2] {
+                                        residuals_sum[[ielem, ivar, ibasis]] -= edge_weights[igp] * boundary_inviscid_flux[ivar] * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                                    }
+                                }
+                            }
+                        }
+                    }  
+                }   
+            }
+            for igp in 0..cell_ngp {
+                let mut sol: Array<f64, Ix1> = Array::zeros(neq);
+                for ivar in 0..solutions.shape()[1] {
+                    for ibasis in 0..solutions.shape()[2] {
+                        sol[ivar] += solutions[[ielem, ivar, ibasis]] * self.basis.phis_cell_gps[[igp, ibasis]];
+                    }
+                }
+                let (f, g) = flux(
+                    &sol, 
+                    self.flow_param.hcr
+                );
+                for ivar in 0..solutions.shape()[1] {
+                    for ibasis in 0..solutions.shape()[2] {
+                        let dphi_dx = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
+                        let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
+                        residuals_sum[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
+                            * cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                    }
+                }
+            }
+            residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
+    }
+    pub fn apply_bc_ns(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         /*
         for patch in self.mesh.patches.iter() {
             match patch.boundary_type {
@@ -136,7 +248,6 @@ impl<'a> SpatialDisc<'a> {
                                 for ivar in 0..residuals.shape()[1] {
                                     for ibasis in 0..residuals.shape()[2] {
                                         residuals_sum[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar] - boundary_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
-                                        //residuals[[ielem, ivar, ibasis]] -= edge_weights[igp] * (boundary_inviscid_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                                     }
                                 }
                             }
@@ -294,8 +405,6 @@ impl<'a> SpatialDisc<'a> {
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
                         residuals_sum[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
-                        //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
-                            //* cell_weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
@@ -386,7 +495,6 @@ impl<'a> SpatialDisc<'a> {
     */
     fn compute_boundary_edges_values(&self, edge: &Edge, solutions: &Array<f64, Ix3>, igp: usize) -> Array<f64, Ix1> {
         let nbasis = self.solver_param.number_of_basis_functions;
-        let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
         let mut edges_values = Array::zeros(neq);
         let ielem = edge.ielements[0];

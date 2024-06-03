@@ -1,6 +1,6 @@
 use std::f64::EPSILON;
 
-use ndarray::{s, Ix2, Ix3};
+use ndarray::{s, Axis, Ix2, Ix3};
 use ndarray::Array;
 use crate::spatial_disc::{local_characteristics, SpatialDisc};
 impl SpatialDisc<'_> {
@@ -14,7 +14,6 @@ impl SpatialDisc<'_> {
         let mut min_density = 1.0e10;
         let mut min_total_energy = 1.0e10;
         for (in_cell_index, iedge) in element.iedges.indexed_iter() {
-            //match edge_type_and_index {
             let edge = &self.mesh.edges[*iedge];
             if edge.ielements[1] != -1 {
                 let edge = &self.mesh.edges[*iedge];
@@ -88,16 +87,114 @@ impl SpatialDisc<'_> {
         let neq = self.solver_param.number_of_equations;
         let nbasis = self.solver_param.number_of_basis_functions;
         let hcr = self.flow_param.hcr;
-        let linear_weights = [0.995, 0.005];
         for (ielem, element) in self.mesh.elements.indexed_iter() {
-            let mut neighbour_area = 0.0;
             if self.modified_kxrcf(solutions, ielem) {
                 //dbg!(&ielem);
+                let linear_weights = {
+                    let mut weights = [0.997, 0.001, 0.001, 0.001];
+                    let mut number_of_boundary_neighbours = 0;
+                    for (i, iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
+                        let edge_i = &self.mesh.edges[*iedge];
+                        if edge_i.ielements[1] == -1 {
+                            number_of_boundary_neighbours += 1;
+                            weights[i] = 0.0;
+                        }
+                    }
+                    match number_of_boundary_neighbours {
+                        0 => weights[0] = 0.997,
+                        1 => weights[1] = 0.998,
+                        2 => weights[2] = 0.999,
+                        _ => panic!("Invalid number of boundary neighbours!")
+                    }
+                    weights
+                };
+                let mut neighbour_area = 0.0;
+                let tgt_pol = solutions.slice(s![ielem, .., ..]);
                 let mut reconstructed_pol: Array<f64, Ix2> = Array::zeros((neq, nbasis));
                 for (i, iedge) in self.mesh.elements[ielem].iedges.indexed_iter() {
-                    //match edge_type_and_index {
-                    let edge = &self.mesh.edges[*iedge];
-                    if edge.ielements[1] != -1 {
+                    let edge_i = &self.mesh.edges[*iedge];
+                    if edge_i.ielements[1] != -1 {
+                        let ineighbour = element.ineighbours[i] as usize;
+                        neighbour_area += self.mesh.elements[ineighbour].jacob_det * 0.5;
+                        let mut nonlinear_weights: Array<f64, Ix2> = Array::zeros((4, neq));
+                        let mut proj_pols: Array<f64, Ix3> = Array::zeros((4, neq, nbasis));
+                        let nx = self.mesh.edges[*iedge].normal[0];
+                        let ny = self.mesh.edges[*iedge].normal[1];
+                        let (lmatrix, rmatrix) = local_characteristics::compute_eigenmatrix(tgt_pol.slice(s![.., 0]), nx, ny, hcr);
+                        proj_pols.slice_mut(s![0, .., ..]).assign(&lmatrix.dot(&tgt_pol));
+                        for ivar in 0..neq {
+                            let mut beta = 0.0;
+                            for l in 1..=self.solver_param.order_of_polynomials {
+                                for l_1 in 0..=l {
+                                    let l_2 = l - l_1;
+                                    let mut integral = 0.0;
+                                    for (igp, cell_weight) in self.gauss_points.cell_weights.indexed_iter() {
+                                        let mut value = 0.0;
+                                        for ibasis in 0..nbasis {
+                                            value += proj_pols[[0, ivar, ibasis]]
+                                                * element.dphis_cell_gps[[igp, ibasis]].get(&(l_1, l_2)).unwrap();
+                                        }
+                                        integral += 0.5 * element.jacob_det * cell_weight * value.powf(2.0);
+                                    }
+                                    beta += element.jacob_det.powf((l - 1) as f64) * integral;                                            
+                                }
+                            }
+                            nonlinear_weights[[0, ivar]] = linear_weights[0] / (beta + EPSILON).powf(2.0);
+                        }
+                        for (j, jedge) in element.iedges.indexed_iter() {
+                            let edge_j = &self.mesh.edges[*jedge];
+                            if edge_j.ielements[1] != -1 {
+                                let jneighbour = element.ineighbours[j] as usize;
+                                let average_modified_nb_pol = {
+                                    let mut nb_pol = solutions.slice(s![jneighbour, .., ..]).to_owned();
+                                    for ivar in 0..neq {
+                                        nb_pol[[ivar, 0]] = tgt_pol[[ivar, 0]];
+                                    }
+                                    nb_pol
+                                };
+                                proj_pols.slice_mut(s![j + 1, .., ..]).assign(&lmatrix.dot(&average_modified_nb_pol));
+                                for ivar in 0..neq {
+                                    let mut beta = 0.0;
+                                    for l in 1..=self.solver_param.order_of_polynomials {
+                                        for l_1 in 0..=l {
+                                            let l_2 = l - l_1;
+                                            let mut integral = 0.0;
+                                            for (igp, cell_weight) in self.gauss_points.cell_weights.indexed_iter() {
+                                                let mut value = 0.0;
+                                                for ibasis in 0..nbasis {
+                                                    value += proj_pols[[j + 1, ivar, ibasis]]
+                                                        * element.dphis_cell_gps[[igp, ibasis]].get(&(l_1, l_2)).unwrap();
+                                                }
+                                                integral += 0.5 * element.jacob_det * cell_weight * value.powf(2.0);
+                                            }
+                                            beta += element.jacob_det.powf((l - 1) as f64) * integral;                                            
+                                        }
+                                    }
+                                    nonlinear_weights[[j + 1, ivar]] = linear_weights[j + 1] / (beta + EPSILON).powf(2.0);
+                                }
+                            }
+                            else {
+                                continue;
+                            }
+                        }
+                        let mut weights: Array<f64, Ix2> = Array::zeros((4, neq));
+                        let denominator = nonlinear_weights.sum_axis(Axis(0));
+                        for ivar in 0..neq {
+                            for j in 0..4 {
+                                weights[[j, ivar]] = nonlinear_weights[[j, ivar]] / (denominator[ivar]);
+                            }
+                        }
+                        let mut pol_new: Array<f64, Ix2> = Array::zeros((neq, nbasis));
+                        for ivar in 0..neq {
+                            for j in 0..4 {
+                                for ibasis in 0..nbasis {
+                                    pol_new[[ivar, ibasis]] += weights[[j, ivar]] * proj_pols[[j, ivar, ibasis]];
+                                }
+                            }
+                        }
+                        pol_new = rmatrix.dot(&pol_new);
+                        reconstructed_pol = reconstructed_pol + pol_new * self.mesh.elements[ineighbour].jacob_det * 0.5;
+                        /*
                         let ineighbour = self.mesh.elements[ielem].ineighbours[i] as usize;
                         neighbour_area += self.mesh.elements[ineighbour].jacob_det * 0.5;
                         let tgt_pol = solutions.slice(s![ielem, .., ..]);
@@ -115,6 +212,7 @@ impl SpatialDisc<'_> {
                         let proj_nb_pol: Array<f64, Ix2> = lmatrix.dot(&average_modified_nb_pol);
                         let proj_pols: [Array<f64, Ix2>; 2] = [proj_tgt_pol, proj_nb_pol];
                         let mut nonlinear_weights = [0.0; 2];
+
                         {
                             let mut beta = [0.0; 2];
                             let k = self.solver_param.order_of_polynomials;
@@ -153,6 +251,7 @@ impl SpatialDisc<'_> {
                         }
                         let pol_new: Array<f64, Ix2> = weights[0] * &proj_pols[0] + weights[1] * &proj_pols[1];
                         reconstructed_pol = reconstructed_pol + rmatrix.dot(&pol_new) * self.mesh.elements[ineighbour].jacob_det * 0.5;
+                        */
                     }
                     else {
                         continue;
@@ -163,7 +262,9 @@ impl SpatialDisc<'_> {
                 //dbg!(&reconstructed_pol);
                 solutions.slice_mut(s![ielem, .., ..]).assign(&reconstructed_pol);
             }
-            else {}
+            else {
+                continue;
+            }
         }
     }
     fn factorial(n: usize) -> f64 {

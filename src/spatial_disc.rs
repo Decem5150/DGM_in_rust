@@ -15,7 +15,6 @@ pub enum InviscidFluxScheme {
     HLLC,
 }
 pub struct SpatialDisc<'a> {
-    // pub viscous_flux: Box<dyn flux::VisFluxScheme>,
     pub aux_vars: Array<f64, Ix4>,
     pub mesh: &'a Mesh,
     pub basis: &'a DubinerBasis,
@@ -26,12 +25,49 @@ pub struct SpatialDisc<'a> {
 }
 impl<'a> SpatialDisc<'a> {
     pub fn compute_residuals(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
-        self.integrate_over_cell(residuals, solutions);
-        self.integrate_over_edges(residuals, solutions);
-        self.apply_bc(residuals, solutions);
+         
+        self.integrate_over_cell_euler(residuals, solutions);
+        self.integrate_over_edges_euler(residuals, solutions);
+        self.apply_bc_euler(residuals, solutions);
+        
+        
+        //self.integrate_over_cell_ns(residuals, solutions);
+        //self.integrate_over_edges_ns(residuals, solutions);
+        //self.apply_bc_ns(residuals, solutions);
+        
         self.divide_residual_by_mass_mat_diag(residuals);
     }
-    fn integrate_over_cell(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+    fn integrate_over_cell_euler(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        let nelem = self.mesh.elements.len();
+        let cell_ngp = self.solver_param.number_of_cell_gp;
+        let neq = self.solver_param.number_of_equations;
+        let nbasis = self.solver_param.number_of_basis_functions;
+        let weights = &self.gauss_points.cell_weights;
+        *residuals = &*residuals + self.mesh.internal_element_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &ielem| {
+            for igp in 0..cell_ngp {
+                let mut sol: Array<f64, Ix1> = Array::zeros(neq);
+                for ivar in 0..solutions.shape()[1] {
+                    for ibasis in 0..solutions.shape()[2] {
+                        sol[ivar] += solutions[[ielem, ivar, ibasis]] * self.basis.phis_cell_gps[[igp, ibasis]];
+                    }
+                }
+                let (f, g) = flux::flux(
+                    &sol, 
+                    self.flow_param.hcr
+                );
+                for ivar in 0..solutions.shape()[1] {
+                    for ibasis in 0..solutions.shape()[2] {
+                        let dphi_dx = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(1, 0)).unwrap();
+                        let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
+                        residuals_sum[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
+                            * weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
+                    }
+                }
+            }
+        residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
+    }
+    fn integrate_over_cell_ns(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         let nelem = self.mesh.elements.len();
         let cell_ngp = self.solver_param.number_of_cell_gp;
         let edge_ngp = self.solver_param.number_of_edge_gp;
@@ -116,15 +152,64 @@ impl<'a> SpatialDisc<'a> {
                         let dphi_dy = *self.mesh.elements[ielem].dphis_cell_gps[[igp, ibasis]].get(&(0, 1)).unwrap();
                         residuals_sum[[ielem, ivar, ibasis]] += ((f[ivar] - fv[ivar]) * dphi_dx + (g[ivar] - gv[ivar]) * dphi_dy)
                             * weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
-                        //residuals[[ielem, ivar, ibasis]] += (f[ivar] * dphi_dx + g[ivar] * dphi_dy)
-                            //* weights[igp] * 0.5 * self.mesh.elements[ielem].jacob_det;
                     }
                 }
             }
         residuals_sum
         }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
     }
-    fn integrate_over_edges(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+    fn integrate_over_edges_euler(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
+        let nelem = self.mesh.elements.len();
+        let ngp = self.solver_param.number_of_edge_gp;
+        let neq = self.solver_param.number_of_equations;
+        let nbasis = self.solver_param.number_of_basis_functions;
+        let weights = &self.gauss_points.edge_weights;
+        *residuals = &*residuals + self.mesh.internal_edge_indices.par_iter().with_min_len(512).fold(|| Array::zeros((nelem, neq, nbasis)), |mut residuals_sum, &iedge| {
+            let edge = &self.mesh.edges[iedge];
+            let ilic = edge.in_cell_indices[0] as usize;
+            let iric = edge.in_cell_indices[1] as usize;
+            let ilelem = edge.ielements[0] as usize;
+            let irelem = edge.ielements[1] as usize;
+            let left_dofs = solutions.slice(s![ilelem, .., ..]);
+            let right_dofs = solutions.slice(s![irelem, .., ..]);
+            let nx = edge.normal[0];
+            let ny = edge.normal[1];
+            // compute numerical flux
+            for igp in 0..ngp {
+                // compute inviscid flux
+                let mut left_values: Array<f64, Ix1> = Array::zeros(neq);
+                let mut right_values: Array<f64, Ix1> = Array::zeros(neq);
+                for ivar in 0..neq {
+                    for ibasis in 0..nbasis {
+                        left_values[ivar] += left_dofs[[ivar, ibasis]] * self.basis.phis_edge_gps[[ilic, igp, ibasis]];  
+                        right_values[ivar] += right_dofs[[ivar, ibasis]] * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]];
+                    }
+                }
+                //println!("{:?}", edge.ielements);
+                let num_flux = match flux::hllc(
+                    &left_values, 
+                    &right_values, 
+                    &edge.normal, 
+                    &self.flow_param.hcr
+                    ) {
+                        Ok(flux) => flux,
+                        Err(e) => {
+                            println!("{}", e);
+                            dbg!(&edge);
+                            panic!("Error in HLLC flux computation!");
+                    }
+                };
+                for ivar in 0..residuals.shape()[1] {
+                    for ibasis in 0..residuals.shape()[2] {
+                        residuals_sum[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
+                        residuals_sum[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
+                    }
+                }
+            }
+            residuals_sum
+        }).reduce(|| Array::zeros((nelem, neq, nbasis)), |a, b| a + b);
+    }
+    fn integrate_over_edges_ns(&self, residuals: &mut Array<f64, Ix3>, solutions: &Array<f64, Ix3>) {
         let nelem = self.mesh.elements.len();
         let ngp = self.solver_param.number_of_edge_gp;
         let neq = self.solver_param.number_of_equations;
@@ -179,13 +264,18 @@ impl<'a> SpatialDisc<'a> {
                     }
                 }
                 //println!("{:?}", edge.ielements);
-                let num_flux = match self.solver_param.inviscid_flux_scheme {
-                    InviscidFluxScheme::HLLC => flux::hllc(
-                        &left_values, 
-                        &right_values, 
-                        &edge.normal, 
-                        &self.flow_param.hcr
-                        ),
+                let num_flux = match flux::hllc(
+                    &left_values, 
+                    &right_values, 
+                    &edge.normal, 
+                    &self.flow_param.hcr
+                    ) {
+                        Ok(flux) => flux,
+                        Err(e) => {
+                            println!("{}", e);
+                            dbg!(&edge);
+                            panic!("Error in HLLC flux computation!");
+                    }
                 };
                 // compute viscous flux
                 let mut num_viscous_flux: Array<f64, Ix1> = Array::zeros(neq);
@@ -250,8 +340,6 @@ impl<'a> SpatialDisc<'a> {
                     for ibasis in 0..residuals.shape()[2] {
                         residuals_sum[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
                         residuals_sum[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar] - num_viscous_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
-                        //residuals[[ilelem, ivar, ibasis]] -= weights[igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[ilic, igp, ibasis]] * 0.5 * edge.jacob_det;
-                        //residuals[[irelem, ivar, ibasis]] += weights[ngp - 1 - igp] * (num_flux[ivar]) * self.basis.phis_edge_gps[[iric, ngp - 1 - igp, ibasis]] * 0.5 * edge.jacob_det;
                     }
                 }
             }

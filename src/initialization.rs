@@ -126,8 +126,8 @@ pub fn process_mesh(solver_param: &SolverParameters, vertices_vec: Vec<Vertex>, 
                 let sound_speed = (free_stream_condition.hcr * free_stream_condition.freestream_pressure / free_stream_condition.freestream_density).sqrt();
                 (BoundaryType::FarField, Some(BoundaryQuantity {
                     rho: free_stream_condition.freestream_density,
-                    u: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.cos(),
-                    v: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.sin(),
+                    u: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.to_radians().cos(),
+                    v: free_stream_condition.mach_number * sound_speed * free_stream_condition.angle_of_attack.to_radians().sin(),
                     p: free_stream_condition.freestream_pressure,
                 }))
             },

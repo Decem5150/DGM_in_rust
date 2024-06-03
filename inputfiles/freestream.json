@@ -1,6 +1,6 @@
 {
-    "angle_of_attack": 0.0,
-    "mach_number": 0.5,
+    "angle_of_attack": 1.5,
+    "mach_number": 0.8,
     "freestream_density": 1.0,
     "freestream_pressure": 100000.0,
     "freestream_temperature": 1.0,

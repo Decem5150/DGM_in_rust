@@ -48,8 +48,10 @@ impl<'a> Solver<'a> {
             let density = initial_solution.density;
             let pressure = initial_solution.pressure;
             let sound_speed = (self.flow_param.hcr * pressure / density).sqrt();
-            let x_velocity = initial_solution.x_mach_number * sound_speed;
-            let y_velocity = initial_solution.y_mach_number * sound_speed;
+            let x_mach_number = initial_solution.mach_number * initial_solution.angle_of_attack.to_radians().cos();
+            let y_mach_number = initial_solution.mach_number * initial_solution.angle_of_attack.to_radians().sin();
+            let x_velocity = x_mach_number * sound_speed;
+            let y_velocity = y_mach_number * sound_speed;
             let total_energy = pressure / (self.flow_param.hcr - 1.0) + 0.5 * density * (x_velocity.powi(2) + y_velocity.powi(2));
             [
                 density,

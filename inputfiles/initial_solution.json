@@ -1,6 +1,6 @@
 {
     "density": 1.0,
-    "x_mach_number": 0.5,
-    "y_mach_number": 0.0, 
+    "angle_of_attack": 1.5,
+    "mach_number": 0.8, 
     "pressure": 100000.0
 }
